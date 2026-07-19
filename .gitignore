@@ -1,0 +1,23 @@
+# Samples
+samples/SampleTvInput/
+
+# Eclipse
+bin/
+gen/
+obj/
+.metadata/
+.settings/
+.project
+.classpath
+project.properties
+
+# Intellij
+out/
+.idea/
+*.iml
+*.iws
+build/
+.gradle/
+local.properties
+.DS_Store
+*.apk

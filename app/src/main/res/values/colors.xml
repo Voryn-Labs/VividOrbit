@@ -1,0 +1,11 @@
+<resources>
+    <color name="bg_dark">#1A1D24</color>
+    <color name="bg_dark_gradient_start">#1F232B</color>
+    <color name="bg_dark_gradient_end">#14171C</color>
+    <color name="focus_matte_gray">#E0E0E0</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#8E8E93</color>
+    <color name="accent_blue">#0A84FF</color>
+    <color name="bg_overlay">#CC000000</color>
+    <color name="divider_color">#2C2F36</color>
+</resources>
