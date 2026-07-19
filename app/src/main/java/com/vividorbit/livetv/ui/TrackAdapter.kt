@@ -40,6 +40,7 @@ class TrackAdapter(
             nameText.text = displayName
 
             itemView.setOnFocusChangeListener { view, hasFocus ->
+                view.animate().cancel()
                 if (hasFocus) {
                     view.animate()
                         .scaleX(1.02f)

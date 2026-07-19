@@ -2,7 +2,7 @@ package com.vividorbit.livetv
 
 import android.app.Activity
 import android.media.tv.TvContract
-import android.media.tv.TvTrackInfo
+import android.media.tv.TvInputManager
 import android.media.tv.TvView
 import android.net.Uri
 import android.os.Bundle
@@ -39,6 +39,7 @@ class MainActivity : Activity(), CoroutineScope {
     private lateinit var repository: ChannelRepository
 
     private lateinit var progressBar: ProgressBar
+    private lateinit var channelUnavailableText: TextView
     private lateinit var sidebarContainer: View
     private lateinit var sidebarHeader: TextView
     private lateinit var channelRecyclerView: RecyclerView
@@ -57,17 +58,6 @@ class MainActivity : Activity(), CoroutineScope {
     private val bannerHandler = Handler(Looper.getMainLooper())
     private val hideBannerRunnable = Runnable {
         channelBannerCard.visibility = View.GONE
-    }
-
-    private var pendingTuneChannel: Channel? = null
-    private val zappingHandler = Handler(Looper.getMainLooper())
-    private val zappingRunnable = Runnable {
-        val channel = pendingTuneChannel
-        if (channel != null) {
-            progressHandler.removeCallbacks(showProgressRunnable)
-            progressHandler.postDelayed(showProgressRunnable, 1500)
-            tvViewHelper.tune(channel.inputId, TvContract.buildChannelUri(channel.id))
-        }
     }
 
     private val progressHandler = Handler(Looper.getMainLooper())
@@ -96,7 +86,6 @@ class MainActivity : Activity(), CoroutineScope {
     companion object {
         private val REQUIRED_PERMISSIONS = arrayOf(
             "com.android.providers.tv.permission.READ_EPG_DATA",
-            "com.android.providers.tv.permission.WRITE_EPG_DATA",
             "android.permission.READ_TV_LISTINGS"
         )
         private const val PERMISSION_REQUEST_CODE = 1010
@@ -110,6 +99,7 @@ class MainActivity : Activity(), CoroutineScope {
         // Initialize UI Elements
         tvView = findViewById(R.id.tv_view)
         progressBar = findViewById(R.id.progress_bar)
+        channelUnavailableText = findViewById(R.id.channel_unavailable_text)
         sidebarContainer = findViewById(R.id.sidebar_container)
         sidebarHeader = findViewById(R.id.sidebar_header)
         channelRecyclerView = findViewById(R.id.channel_recycler_view)
@@ -130,10 +120,16 @@ class MainActivity : Activity(), CoroutineScope {
             onVideoAvailable = {
                 progressHandler.removeCallbacks(showProgressRunnable)
                 progressBar.visibility = View.GONE
+                channelUnavailableText.visibility = View.GONE
             },
             onVideoUnavailable = { reason ->
                 progressHandler.removeCallbacks(showProgressRunnable)
-                progressHandler.postDelayed(showProgressRunnable, 1500)
+                if (reason == TvInputManager.VIDEO_UNAVAILABLE_REASON_TUNING) {
+                    progressHandler.postDelayed(showProgressRunnable, 400)
+                } else {
+                    progressBar.visibility = View.GONE
+                    channelUnavailableText.visibility = View.VISIBLE
+                }
             }
         )
         repository = ChannelRepository(this)
@@ -164,7 +160,7 @@ class MainActivity : Activity(), CoroutineScope {
 
             // Setup Adapters
             channelAdapter = ChannelAdapter(filteredChannels, this@MainActivity) { channel ->
-                tuneToChannel(channel, immediate = true)
+                tuneToChannel(channel)
                 hideSidebar()
             }
             channelRecyclerView.adapter = channelAdapter
@@ -186,7 +182,7 @@ class MainActivity : Activity(), CoroutineScope {
 
             // Auto-tune first channel if available
             if (allChannels.isNotEmpty()) {
-                tuneToChannel(allChannels[0], immediate = true)
+                tuneToChannel(allChannels[0])
             }
 
             // Show sidebar on launch so the interface is visible immediately
@@ -205,21 +201,14 @@ class MainActivity : Activity(), CoroutineScope {
         channelAdapter.updateChannels(filteredChannels)
     }
 
-    private fun tuneToChannel(channel: Channel, immediate: Boolean = false) {
+    private fun tuneToChannel(channel: Channel) {
         selectedChannel = channel
         showBottomBanner(channel)
+        channelUnavailableText.visibility = View.GONE
 
-        zappingHandler.removeCallbacks(zappingRunnable)
-        if (immediate) {
-            progressHandler.removeCallbacks(showProgressRunnable)
-            progressHandler.postDelayed(showProgressRunnable, 1500)
-            tvViewHelper.tune(channel.inputId, TvContract.buildChannelUri(channel.id))
-        } else {
-            progressHandler.removeCallbacks(showProgressRunnable)
-            progressBar.visibility = View.GONE
-            pendingTuneChannel = channel
-            zappingHandler.postDelayed(zappingRunnable, 150)
-        }
+        progressHandler.removeCallbacks(showProgressRunnable)
+        progressHandler.postDelayed(showProgressRunnable, 400)
+        tvViewHelper.tune(channel.inputId, TvContract.buildChannelUri(channel.id))
     }
 
     private fun showBottomBanner(channel: Channel) {
@@ -255,7 +244,7 @@ class MainActivity : Activity(), CoroutineScope {
             }
         }
         val targetChannel = listToNavigate[nextIndex]
-        tuneToChannel(targetChannel, immediate = false)
+        tuneToChannel(targetChannel)
     }
 
     private fun isAnyMenuVisible(): Boolean {
@@ -267,7 +256,7 @@ class MainActivity : Activity(), CoroutineScope {
     private fun tuneToChannelNumber(number: String) {
         val channel = allChannels.find { it.displayNumber == number }
         if (channel != null) {
-            tuneToChannel(channel, immediate = true)
+            tuneToChannel(channel)
         }
     }
 
@@ -402,7 +391,6 @@ class MainActivity : Activity(), CoroutineScope {
 
     override fun onResume() {
         super.onResume()
-        // Playback resumption handled by Android TvView automatically
     }
 
     override fun onPause() {
@@ -414,15 +402,21 @@ class MainActivity : Activity(), CoroutineScope {
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            loadChannelData()
-        }
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            if (grantResults.all { it == android.content.pm.PackageManager.PERMISSION_GRANTED }) {
+                loadChannelData()
+            }
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        bannerHandler.removeCallbacksAndMessages(null)
+        progressHandler.removeCallbacksAndMessages(null)
+        numericHandler.removeCallbacksAndMessages(null)
         job.cancel()
+        tvViewHelper.cleanup()
         tvViewHelper.reset()
     }
 }

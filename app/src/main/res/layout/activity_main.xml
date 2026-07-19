@@ -22,6 +22,20 @@
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent" />
 
+    <!-- Channel unavailable message -->
+    <TextView
+        android:id="@+id/channel_unavailable_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/channel_unavailable"
+        android:textColor="@color/text_secondary"
+        android:textSize="20sp"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent" />
+
     <!-- Channel List Sidebar (Flow 1) -->
     <LinearLayout
         android:id="@+id/sidebar_container"

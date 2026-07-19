@@ -65,6 +65,14 @@ class TvViewHelper(
         }
     }
 
+    fun cleanup() {
+        try {
+            tvView.setCallback(null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing TvView callback: ${e.message}", e)
+        }
+    }
+
     fun reset() {
         try {
             tvView.reset()

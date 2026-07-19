@@ -46,6 +46,7 @@ class ChannelAdapter(
 
         init {
             itemView.setOnFocusChangeListener { view, hasFocus ->
+                view.animate().cancel()
                 if (hasFocus) {
                     view.animate()
                         .scaleX(1.02f)
@@ -69,22 +70,18 @@ class ChannelAdapter(
             imageJob?.cancel()
             logoImage.setImageResource(android.R.drawable.ic_menu_slideshow)
             
-            if (channel.logoUri != null) {
-                imageJob = scope.launch(Dispatchers.IO) {
-                    try {
-                        val inputStream = itemView.context.contentResolver.openInputStream(channel.logoUri)
-                        if (inputStream != null) {
-                            val bitmap = BitmapFactory.decodeStream(inputStream)
-                            inputStream.close()
-                            if (bitmap != null) {
-                                withContext(Dispatchers.Main) {
-                                    logoImage.setImageBitmap(bitmap)
-                                }
+            imageJob = scope.launch(Dispatchers.IO) {
+                try {
+                    itemView.context.contentResolver.openInputStream(channel.logoUri)?.use { inputStream ->
+                        val bitmap = BitmapFactory.decodeStream(inputStream)
+                        if (bitmap != null) {
+                            withContext(Dispatchers.Main) {
+                                logoImage.setImageBitmap(bitmap)
                             }
                         }
-                    } catch (e: Exception) {
-                        // Ignore, fallback is already set
                     }
+                } catch (e: Exception) {
+                    // Ignore, fallback is already set
                 }
             }
 

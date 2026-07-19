@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">VividOrbit</string>
+    <string name="channel_unavailable">Channel Unavailable</string>
 </resources>
