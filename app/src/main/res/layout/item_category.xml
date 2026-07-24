@@ -1,22 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="48dp"
+    android:layout_height="52dp"
+    android:layout_marginTop="2dp"
+    android:layout_marginBottom="2dp"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:paddingLeft="16dp"
-    android:paddingRight="16dp"
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp"
     android:focusable="true"
     android:clickable="true"
     android:background="@drawable/item_background_selector">
 
+    <View
+        android:id="@+id/category_indicator"
+        android:layout_width="6dp"
+        android:layout_height="6dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/badge_number_bg" />
+
     <TextView
         android:id="@+id/category_name"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_weight="1"
         android:textColor="@color/item_text_color_selector"
         android:textSize="16sp"
+        android:textStyle="bold"
         android:ellipsize="end"
-        android:singleLine="true"
+        android:maxLines="1"
         android:text="Category Name" />
 </LinearLayout>

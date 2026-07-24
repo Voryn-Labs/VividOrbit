@@ -1,11 +1,18 @@
 <resources>
-    <color name="bg_dark">#1A1D24</color>
-    <color name="bg_dark_gradient_start">#1F232B</color>
-    <color name="bg_dark_gradient_end">#14171C</color>
-    <color name="focus_matte_gray">#E0E0E0</color>
-    <color name="text_primary">#FFFFFF</color>
-    <color name="text_secondary">#8E8E93</color>
-    <color name="accent_blue">#0A84FF</color>
-    <color name="bg_overlay">#CC000000</color>
-    <color name="divider_color">#2C2F36</color>
+    <color name="bg_dark">#0F1219</color>
+    <color name="bg_dark_gradient_start">#151924</color>
+    <color name="bg_dark_gradient_end">#0B0E14</color>
+    <color name="glass_bg_sidebar">#EE121622</color>
+    <color name="glass_bg_category">#FA171B28</color>
+    <color name="glass_border">#2A3246</color>
+    <color name="focus_matte_gray">#2563EB</color>
+    <color name="focus_bg_color">#262563EB</color>
+    <color name="focus_border_color">#60A5FA</color>
+    <color name="number_badge_bg">#1E2638</color>
+    <color name="badge_text">#93C5FD</color>
+    <color name="text_primary">#F8FAFC</color>
+    <color name="text_secondary">#94A3B8</color>
+    <color name="accent_blue">#3B82F6</color>
+    <color name="bg_overlay">#D9090B10</color>
+    <color name="divider_color">#1E2636</color>
 </resources>

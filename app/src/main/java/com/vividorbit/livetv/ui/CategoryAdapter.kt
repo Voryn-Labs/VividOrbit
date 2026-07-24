@@ -9,7 +9,7 @@ import com.vividorbit.livetv.R
 
 class CategoryAdapter(
     private val categories: List<String>,
-    private val onCategoryFocused: (String) -> Unit,
+    private var selectedCategory: String = "All Channels",
     private val onCategoryClick: (String) -> Unit
 ) : RecyclerView.Adapter<CategoryAdapter.ViewHolder>() {
 
@@ -20,37 +20,36 @@ class CategoryAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val category = categories[position]
-        holder.bind(category, onCategoryFocused, onCategoryClick)
+        holder.bind(category, category == selectedCategory, onCategoryClick = { clickedCat ->
+            val oldPos = categories.indexOf(selectedCategory)
+            selectedCategory = clickedCat
+            if (oldPos != -1) notifyItemChanged(oldPos)
+            notifyItemChanged(position)
+            onCategoryClick(clickedCat)
+        })
     }
 
     override fun getItemCount(): Int = categories.size
 
+    fun setSelectedCategory(category: String) {
+        val oldPos = categories.indexOf(selectedCategory)
+        selectedCategory = category
+        val newPos = categories.indexOf(selectedCategory)
+        if (oldPos != -1) notifyItemChanged(oldPos)
+        if (newPos != -1) notifyItemChanged(newPos)
+    }
+
     class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val nameText: TextView = itemView.findViewById(R.id.category_name)
+        private val indicatorView: View = itemView.findViewById(R.id.category_indicator)
 
-        fun bind(category: String, onFocused: (String) -> Unit, onClick: (String) -> Unit) {
+        fun bind(category: String, isSelected: Boolean, onCategoryClick: (String) -> Unit) {
             nameText.text = category
-
-            itemView.setOnFocusChangeListener { view, hasFocus ->
-                view.animate().cancel()
-                if (hasFocus) {
-                    view.animate()
-                        .scaleX(1.02f)
-                        .scaleY(1.02f)
-                        .setDuration(160)
-                        .start()
-                    onFocused(category)
-                } else {
-                    view.animate()
-                        .scaleX(1.0f)
-                        .scaleY(1.0f)
-                        .setDuration(160)
-                        .start()
-                }
-            }
+            itemView.isSelected = isSelected
+            indicatorView.visibility = if (isSelected) View.VISIBLE else View.INVISIBLE
 
             itemView.setOnClickListener {
-                onClick(category)
+                onCategoryClick(category)
             }
         }
     }

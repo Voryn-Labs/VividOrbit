@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
 import android.view.View
+import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -93,6 +94,7 @@ class MainActivity : Activity(), CoroutineScope {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         job = Job()
         setContentView(R.layout.activity_main)
 
@@ -167,9 +169,7 @@ class MainActivity : Activity(), CoroutineScope {
 
             categoryAdapter = CategoryAdapter(
                 categories = categories,
-                onCategoryFocused = { category ->
-                    filterChannels(category)
-                },
+                selectedCategory = currentCategory,
                 onCategoryClick = { category ->
                     filterChannels(category)
                     categoryContainer.visibility = View.GONE
@@ -198,6 +198,7 @@ class MainActivity : Activity(), CoroutineScope {
         } else {
             allChannels.filter { repository.cleanInputName(it.inputId) == category }
         }
+        categoryAdapter.setSelectedCategory(category)
         channelAdapter.updateChannels(filteredChannels)
     }
 
@@ -380,9 +381,14 @@ class MainActivity : Activity(), CoroutineScope {
             }
         }
 
-        // Custom or standard remote audio track key triggers
+        // Custom or standard remote audio track key triggers & quick audio recovery key (PROG_GREEN)
         if (keyCode == KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK || keyCode == KeyEvent.KEYCODE_PROG_RED) {
             showAudioTrackSelector()
+            return true
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_PROG_GREEN) {
+            tvViewHelper.recoverAudio()
             return true
         }
 
@@ -391,6 +397,7 @@ class MainActivity : Activity(), CoroutineScope {
 
     override fun onResume() {
         super.onResume()
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
     override fun onPause() {
