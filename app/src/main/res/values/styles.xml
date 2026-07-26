@@ -2,6 +2,6 @@
     <style name="Theme.VividTv" parent="Theme.Leanback">
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowFullscreen">true</item>
-        <item name="android:windowBackground">@color/bg_dark</item>
+        <item name="android:windowBackground">@drawable/root_bg</item>
     </style>
 </resources>

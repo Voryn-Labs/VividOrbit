@@ -1,8 +1,5 @@
 package com.vividorbit.livetv.ui
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.util.LruCache
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -21,18 +18,11 @@ import kotlinx.coroutines.withContext
 class ChannelAdapter(
     private var channels: List<Channel>,
     private val scope: CoroutineScope,
+    private var currentChannelId: Long? = null,
     private val onChannelClick: (Channel) -> Unit
 ) : RecyclerView.Adapter<ChannelAdapter.ViewHolder>() {
 
-    companion object {
-        private val maxMemory = (Runtime.getRuntime().maxMemory() / 1024).toInt()
-        private val cacheSize = maxMemory / 8
-        private val logoCache = object : LruCache<Long, Bitmap>(cacheSize) {
-            override fun sizeOf(key: Long, bitmap: Bitmap): Int {
-                return bitmap.byteCount / 1024
-            }
-        }
-    }
+    private var updateJob: Job? = null
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_channel, parent, false)
@@ -41,25 +31,52 @@ class ChannelAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val channel = channels[position]
-        holder.bind(channel, onChannelClick)
+        holder.bind(channel, channel.id == currentChannelId, onChannelClick)
     }
 
     override fun getItemCount(): Int = channels.size
 
-    fun updateChannels(newChannels: List<Channel>) {
-        val diffCallback = object : DiffUtil.Callback() {
-            override fun getOldListSize(): Int = channels.size
-            override fun getNewListSize(): Int = newChannels.size
-            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                return channels[oldItemPosition].id == newChannels[newItemPosition].id
-            }
-            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                return channels[oldItemPosition] == newChannels[newItemPosition]
+    /**
+     * Marks [channelId] as the currently-playing channel so its row is
+     * visually highlighted in the list (reuses the existing selected-state
+     * drawable/color selectors, which previously were never wired up here).
+     */
+    fun setCurrentChannel(channelId: Long?) {
+        if (currentChannelId == channelId) return
+        val oldId = currentChannelId
+        currentChannelId = channelId
+        channels.forEachIndexed { index, channel ->
+            if (channel.id == oldId || channel.id == channelId) {
+                notifyItemChanged(index)
             }
         }
-        val diffResult = DiffUtil.calculateDiff(diffCallback)
-        channels = newChannels
-        diffResult.dispatchUpdatesTo(this)
+    }
+
+    fun updateChannels(newChannels: List<Channel>) {
+        val oldChannels = channels
+
+        // Compute the diff off the main thread and supersede any in-flight
+        // diff from a previous rapid call - for large channel lists this was
+        // previously run synchronously on the caller's thread and could
+        // visibly stall the guide UI every time a category was switched.
+        updateJob?.cancel()
+        updateJob = scope.launch(Dispatchers.Default) {
+            val diffCallback = object : DiffUtil.Callback() {
+                override fun getOldListSize(): Int = oldChannels.size
+                override fun getNewListSize(): Int = newChannels.size
+                override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                    return oldChannels[oldItemPosition].id == newChannels[newItemPosition].id
+                }
+                override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                    return oldChannels[oldItemPosition] == newChannels[newItemPosition]
+                }
+            }
+            val diffResult = DiffUtil.calculateDiff(diffCallback)
+            withContext(Dispatchers.Main) {
+                channels = newChannels
+                diffResult.dispatchUpdatesTo(this@ChannelAdapter)
+            }
+        }
     }
 
     class ViewHolder(itemView: View, private val scope: CoroutineScope) : RecyclerView.ViewHolder(itemView) {
@@ -68,30 +85,24 @@ class ChannelAdapter(
         private val nameText: TextView = itemView.findViewById(R.id.channel_name)
         private var imageJob: Job? = null
 
-        fun bind(channel: Channel, onClick: (Channel) -> Unit) {
+        fun bind(channel: Channel, isCurrentlyPlaying: Boolean, onClick: (Channel) -> Unit) {
             numberText.text = channel.displayNumber
             nameText.text = channel.displayName
-            
+            itemView.isSelected = isCurrentlyPlaying
+
             imageJob?.cancel()
 
-            val cachedBitmap = logoCache.get(channel.id)
+            val cachedBitmap = ChannelLogoLoader.getCached(channel.id)
             if (cachedBitmap != null) {
                 logoImage.setImageBitmap(cachedBitmap)
             } else {
                 logoImage.setImageResource(android.R.drawable.ic_menu_slideshow)
                 imageJob = scope.launch(Dispatchers.IO) {
-                    try {
-                        itemView.context.contentResolver.openInputStream(channel.logoUri)?.use { inputStream ->
-                            val bitmap = BitmapFactory.decodeStream(inputStream)
-                            if (bitmap != null) {
-                                logoCache.put(channel.id, bitmap)
-                                withContext(Dispatchers.Main) {
-                                    logoImage.setImageBitmap(bitmap)
-                                }
-                            }
+                    val bitmap = ChannelLogoLoader.loadAndCache(itemView.context, channel.id, channel.logoUri)
+                    if (bitmap != null) {
+                        withContext(Dispatchers.Main) {
+                            logoImage.setImageBitmap(bitmap)
                         }
-                    } catch (e: Exception) {
-                        // Ignore, fallback is already set
                     }
                 }
             }

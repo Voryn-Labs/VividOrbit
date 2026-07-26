@@ -3,6 +3,8 @@ package com.vividorbit.livetv.player
 import android.media.tv.TvTrackInfo
 import android.media.tv.TvView
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 
 class TvViewHelper(
@@ -12,10 +14,27 @@ class TvViewHelper(
 ) {
     companion object {
         private const val TAG = "TvViewHelper"
+
+        // How often we proactively re-validate that the audio track we think
+        // is selected is still actually present in the input's current track
+        // list. Some tuner HALs silently renegotiate/regenerate track ids
+        // when audio glitches, which leaves the "selected" id stale but
+        // non-null - a plain null-check misses that case entirely.
+        private const val AUDIO_WATCHDOG_INTERVAL_MS = 4000L
     }
 
     private var currentInputId: String? = null
+    private var currentChannelId: Long? = null
     private var lastSelectedAudioTrackId: String? = null
+    private var hasReceivedFirstFrame = false
+
+    private val watchdogHandler = Handler(Looper.getMainLooper())
+    private val audioWatchdogRunnable = object : Runnable {
+        override fun run() {
+            ensureAudioTrackSelected()
+            watchdogHandler.postDelayed(this, AUDIO_WATCHDOG_INTERVAL_MS)
+        }
+    }
 
     init {
         tvView.setCallback(object : TvView.TvInputCallback() {
@@ -23,6 +42,7 @@ class TvViewHelper(
                 super.onVideoAvailable(inputId)
                 Log.d(TAG, "Video available on input: $inputId")
                 currentInputId = inputId
+                hasReceivedFirstFrame = true
                 ensureAudioTrackSelected()
                 onVideoAvailable()
             }
@@ -49,26 +69,42 @@ class TvViewHelper(
         })
     }
 
-    fun tune(inputId: String, channelUri: Uri) {
+    fun tune(inputId: String, channelId: Long, channelUri: Uri) {
         try {
-            Log.d(TAG, "Tuning input: $inputId, uri: $channelUri")
+            Log.d(TAG, "Tuning input: $inputId, channelId: $channelId, uri: $channelUri")
             currentInputId = inputId
+            currentChannelId = channelId
             lastSelectedAudioTrackId = null
+            hasReceivedFirstFrame = false
             tvView.tune(inputId, channelUri)
+
+            watchdogHandler.removeCallbacks(audioWatchdogRunnable)
+            watchdogHandler.postDelayed(audioWatchdogRunnable, AUDIO_WATCHDOG_INTERVAL_MS)
         } catch (e: Exception) {
             Log.e(TAG, "Error tuning: ${e.message}", e)
         }
     }
 
+    /** True if [channelId] is the channel we last issued a tune() for (whether or not it has produced a frame yet). */
+    fun isTunedTo(channelId: Long): Boolean = currentChannelId == channelId
+
+    /** True once the current tune has produced at least one video frame. */
+    fun hasStartedPlayback(): Boolean = hasReceivedFirstFrame
+
     private fun ensureAudioTrackSelected() {
         val audioTracks = getAudioTracks()
-        if (audioTracks.isNotEmpty()) {
-            val selected = getSelectedAudioTrack()
-            if (selected == null) {
-                val targetTrack = lastSelectedAudioTrackId ?: audioTracks[0].id
-                Log.d(TAG, "No audio track active. Auto-selecting track: $targetTrack")
-                selectAudioTrack(targetTrack)
+        if (audioTracks.isEmpty()) return
+
+        val selected = getSelectedAudioTrack()
+        val selectedStillValid = selected != null && audioTracks.any { it.id == selected }
+
+        if (!selectedStillValid) {
+            val preferredStillValid = lastSelectedAudioTrackId?.takeIf { preferred ->
+                audioTracks.any { it.id == preferred }
             }
+            val targetTrack = preferredStillValid ?: audioTracks[0].id
+            Log.d(TAG, "No valid audio track selected (was: $selected). Selecting: $targetTrack")
+            selectAudioTrack(targetTrack)
         }
     }
 
@@ -122,6 +158,7 @@ class TvViewHelper(
     }
 
     fun cleanup() {
+        watchdogHandler.removeCallbacks(audioWatchdogRunnable)
         try {
             tvView.setCallback(null)
         } catch (e: Exception) {
@@ -131,6 +168,7 @@ class TvViewHelper(
 
     fun reset() {
         try {
+            currentChannelId = null
             tvView.reset()
         } catch (e: Exception) {
             Log.e(TAG, "Error resetting TvView: ${e.message}", e)
