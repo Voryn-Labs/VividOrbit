@@ -168,10 +168,16 @@ class TvViewHelper(
 
     fun reset() {
         try {
-            currentChannelId = null
             tvView.reset()
         } catch (e: Exception) {
             Log.e(TAG, "Error resetting TvView: ${e.message}", e)
+        } finally {
+            // Reflect that we're no longer tuned to anything, so a future
+            // tune() call isn't skipped by isTunedTo() thinking nothing
+            // changed.
+            currentChannelId = null
+            hasReceivedFirstFrame = false
+            watchdogHandler.removeCallbacks(audioWatchdogRunnable)
         }
     }
 }
