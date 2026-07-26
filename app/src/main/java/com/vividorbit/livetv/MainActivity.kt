@@ -49,7 +49,8 @@ class MainActivity : Activity(), CoroutineScope {
     private lateinit var channelRecyclerView: RecyclerView
     private lateinit var categoryContainer: View
     private lateinit var categoryRecyclerView: RecyclerView
-    private lateinit var trackSelectorCard: CardView
+    private lateinit var audioContainer: View
+    private lateinit var restartAudioRow: View
     private lateinit var trackRecyclerView: RecyclerView
     private lateinit var numericEntryCard: CardView
     private lateinit var numericEntryText: TextView
@@ -114,7 +115,24 @@ class MainActivity : Activity(), CoroutineScope {
         )
         private const val PERMISSION_REQUEST_CODE = 1010
         private const val ZAP_DEBOUNCE_MS = 300L
+
+        // These are intentionally generous - the guide is designed for
+        // viewers who read and react more slowly, so nothing should vanish
+        // or time out before they've had a real chance to see it.
+        private const val SIDEBAR_AUTO_HIDE_MS = 20000L
+        private const val BANNER_AUTO_HIDE_MS = 6000L
+        private const val NUMERIC_ENTRY_TIMEOUT_MS = 3000L
+
+        // Persists only the last-watched channel/category. Since the app now
+        // fully exits whenever it's left (see onStop()), this is what makes
+        // the next launch resume where you left off instead of always
+        // restarting on the first channel.
+        private const val PREFS_NAME = "vividorbit_prefs"
+        private const val PREF_LAST_CHANNEL_ID = "last_channel_id"
+        private const val PREF_LAST_CATEGORY = "last_category"
     }
+
+    private val prefs by lazy { getSharedPreferences(PREFS_NAME, MODE_PRIVATE) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -135,7 +153,8 @@ class MainActivity : Activity(), CoroutineScope {
         channelRecyclerView = findViewById(R.id.channel_recycler_view)
         categoryContainer = findViewById(R.id.category_container)
         categoryRecyclerView = findViewById(R.id.category_recycler_view)
-        trackSelectorCard = findViewById(R.id.track_selector_card)
+        audioContainer = findViewById(R.id.audio_container)
+        restartAudioRow = findViewById(R.id.restart_audio_row)
         trackRecyclerView = findViewById(R.id.track_recycler_view)
         numericEntryCard = findViewById(R.id.numeric_entry_card)
         numericEntryText = findViewById(R.id.numeric_entry_text)
@@ -192,6 +211,14 @@ class MainActivity : Activity(), CoroutineScope {
         )
         repository = ChannelRepository(this)
 
+        // A plain, always-visible menu item instead of a hidden colored
+        // remote button - anyone can find and use audio recovery this way.
+        restartAudioRow.setOnClickListener {
+            tvViewHelper.recoverAudio()
+            hideAudioPanel()
+            channelRecyclerView.requestFocus()
+        }
+
         // Set up recyclerview layouts
         channelRecyclerView.layoutManager = LinearLayoutManager(this)
         channelRecyclerView.setHasFixedSize(true)
@@ -215,8 +242,17 @@ class MainActivity : Activity(), CoroutineScope {
         launch {
             progressBar.visibility = View.VISIBLE
             allChannels = repository.getChannels()
-            filteredChannels = allChannels
             categories = repository.getCategories(allChannels)
+
+            // Restore whichever category the user was last viewing, if it
+            // still exists (e.g. a fresh channel scan could have removed it).
+            val restoredCategory = prefs.getString(PREF_LAST_CATEGORY, "All Channels") ?: "All Channels"
+            currentCategory = if (categories.contains(restoredCategory)) restoredCategory else "All Channels"
+            filteredChannels = if (currentCategory == "All Channels") {
+                allChannels
+            } else {
+                allChannels.filter { repository.cleanInputName(it.inputId) == currentCategory }
+            }
 
             // Setup Adapters
             channelAdapter = ChannelAdapter(
@@ -243,9 +279,13 @@ class MainActivity : Activity(), CoroutineScope {
             progressBar.visibility = View.GONE
             updateSidebarHeader(currentCategory, filteredChannels.size)
 
-            // Auto-tune first channel if available
+            // Resume on whichever channel was last playing, falling back to
+            // the first available channel if it no longer exists (e.g.
+            // removed by a fresh channel scan).
             if (allChannels.isNotEmpty()) {
-                tuneToChannel(allChannels[0])
+                val lastChannelId = prefs.getLong(PREF_LAST_CHANNEL_ID, -1L)
+                val startChannel = allChannels.find { it.id == lastChannelId } ?: allChannels[0]
+                tuneToChannel(startChannel)
             }
 
             // Show sidebar on launch so the interface is visible immediately
@@ -283,6 +323,10 @@ class MainActivity : Activity(), CoroutineScope {
     private fun tuneToChannel(channel: Channel) {
         pendingZapChannel = null
         selectedChannel = channel
+        prefs.edit()
+            .putLong(PREF_LAST_CHANNEL_ID, channel.id)
+            .putString(PREF_LAST_CATEGORY, currentCategory)
+            .apply()
         showBottomBanner(channel)
         channelUnavailableText.visibility = View.GONE
 
@@ -333,7 +377,7 @@ class MainActivity : Activity(), CoroutineScope {
         channelBannerCard.visibility = View.VISIBLE
 
         bannerHandler.removeCallbacks(hideBannerRunnable)
-        bannerHandler.postDelayed(hideBannerRunnable, 3000)
+        bannerHandler.postDelayed(hideBannerRunnable, BANNER_AUTO_HIDE_MS)
     }
 
     private fun navigateChannel(direction: Int) {
@@ -369,7 +413,7 @@ class MainActivity : Activity(), CoroutineScope {
     private fun isAnyMenuVisible(): Boolean {
         return sidebarContainer.visibility == View.VISIBLE ||
                 categoryContainer.visibility == View.VISIBLE ||
-                trackSelectorCard.visibility == View.VISIBLE
+                audioContainer.visibility == View.VISIBLE
     }
 
     private fun tuneToChannelNumber(number: String) {
@@ -383,7 +427,7 @@ class MainActivity : Activity(), CoroutineScope {
     private fun resetSidebarTimer() {
         sidebarHandler.removeCallbacks(hideSidebarRunnable)
         if (isAnyMenuVisible()) {
-            sidebarHandler.postDelayed(hideSidebarRunnable, 8000)
+            sidebarHandler.postDelayed(hideSidebarRunnable, SIDEBAR_AUTO_HIDE_MS)
         }
     }
 
@@ -425,18 +469,31 @@ class MainActivity : Activity(), CoroutineScope {
         sidebarHandler.removeCallbacks(hideSidebarRunnable)
     }
 
-    private fun showAudioTrackSelector() {
+    private fun showAudioPanel() {
         val tracks = tvViewHelper.getAudioTracks()
-        if (tracks.isEmpty()) return
-
         val currentTrackId = tvViewHelper.getSelectedAudioTrack()
-        val adapter = TrackAdapter(tracks, currentTrackId) { track ->
-            tvViewHelper.selectAudioTrack(track.id)
-            trackSelectorCard.visibility = View.GONE
+
+        // Only show the language list at all if there's an actual choice to
+        // make - otherwise "Restart Sound" is the only relevant action.
+        if (tracks.size > 1) {
+            val adapter = TrackAdapter(tracks, currentTrackId) { track ->
+                tvViewHelper.selectAudioTrack(track.id)
+                hideAudioPanel()
+                channelRecyclerView.requestFocus()
+            }
+            trackRecyclerView.adapter = adapter
+            trackRecyclerView.visibility = View.VISIBLE
+        } else {
+            trackRecyclerView.visibility = View.GONE
         }
-        trackRecyclerView.adapter = adapter
-        trackSelectorCard.visibility = View.VISIBLE
-        trackRecyclerView.requestFocus()
+
+        audioContainer.visibility = View.VISIBLE
+        restartAudioRow.requestFocus()
+        resetSidebarTimer()
+    }
+
+    private fun hideAudioPanel() {
+        audioContainer.visibility = View.GONE
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
@@ -481,14 +538,15 @@ class MainActivity : Activity(), CoroutineScope {
                 numericBuffer += digit
                 numericEntryText.text = numericBuffer
                 numericEntryCard.visibility = View.VISIBLE
-                numericHandler.postDelayed(tuneRunnable, 1500)
+                numericHandler.postDelayed(tuneRunnable, NUMERIC_ENTRY_TIMEOUT_MS)
                 return true
             }
         }
 
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (trackSelectorCard.visibility == View.VISIBLE) {
-                trackSelectorCard.visibility = View.GONE
+            if (audioContainer.visibility == View.VISIBLE) {
+                hideAudioPanel()
+                channelRecyclerView.requestFocus()
                 return true
             }
             if (categoryContainer.visibility == View.VISIBLE) {
@@ -503,6 +561,13 @@ class MainActivity : Activity(), CoroutineScope {
         }
 
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+            if (audioContainer.visibility == View.VISIBLE) {
+                // Sound was opened via the right side - left is its mirrored
+                // "back" direction, matching how right closes Categories below.
+                hideAudioPanel()
+                channelRecyclerView.requestFocus()
+                return true
+            }
             if (sidebarContainer.visibility == View.VISIBLE && categoryContainer.visibility != View.VISIBLE) {
                 categoryContainer.visibility = View.VISIBLE
                 // Same scroll-before-focus ordering fix as showSidebar() below.
@@ -530,6 +595,12 @@ class MainActivity : Activity(), CoroutineScope {
                 channelRecyclerView.requestFocus()
                 return true
             }
+            if (sidebarContainer.visibility == View.VISIBLE && audioContainer.visibility != View.VISIBLE) {
+                // Mirrors Categories on the left - reachable by simple D-pad
+                // exploration from the main guide, no hidden button needed.
+                showAudioPanel()
+                return true
+            }
         }
 
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
@@ -549,9 +620,10 @@ class MainActivity : Activity(), CoroutineScope {
             }
         }
 
-        // Custom or standard remote audio track key triggers & quick audio recovery key (PROG_GREEN)
+        // Legacy shortcuts for remotes that do have these keys - the D-pad
+        // path above (channel list -> right) is the primary, discoverable one.
         if (keyCode == KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK || keyCode == KeyEvent.KEYCODE_PROG_RED) {
-            showAudioTrackSelector()
+            showAudioPanel()
             return true
         }
 
@@ -570,6 +642,23 @@ class MainActivity : Activity(), CoroutineScope {
 
     override fun onPause() {
         super.onPause()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // The user has left the app entirely - backgrounded it, switched to
+        // another app, or the TV went to sleep. Rather than lingering in the
+        // background holding the tuner, MediaSession, and other resources,
+        // fully exit here. onDestroy() (triggered by finish()) does the
+        // actual teardown; the next launch resumes on the last channel via
+        // the preferences saved in tuneToChannel().
+        //
+        // Guarded against configuration changes (e.g. a locale/density
+        // change) since those already trigger their own destroy+recreate
+        // cycle - we don't want to also treat that as "the user left".
+        if (!isChangingConfigurations) {
+            finish()
+        }
     }
 
     override fun onRequestPermissionsResult(

@@ -28,9 +28,7 @@ class CategoryAdapter(
     /**
      * Single source of truth for the selected category. Callers should call
      * this once their own filtering/selection logic completes, rather than
-     * the adapter tracking selection itself - previously both the click
-     * handler here and MainActivity's follow-up call updated selection
-     * state independently, which was redundant and easy to get out of sync.
+     * the adapter tracking selection itself.
      */
     fun setSelectedCategory(category: String) {
         val oldPos = categories.indexOf(selectedCategory)
@@ -42,12 +40,12 @@ class CategoryAdapter(
 
     class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val nameText: TextView = itemView.findViewById(R.id.category_name)
-        private val indicatorView: View = itemView.findViewById(R.id.category_indicator)
 
         fun bind(category: String, isSelected: Boolean, onCategoryClick: (String) -> Unit) {
             nameText.text = category
+            // Selection is shown purely by the row's own background/outline
+            // (see item_background_selector.xml) - no separate indicator dot.
             itemView.isSelected = isSelected
-            indicatorView.visibility = if (isSelected) View.VISIBLE else View.INVISIBLE
 
             itemView.setOnClickListener {
                 onCategoryClick(category)

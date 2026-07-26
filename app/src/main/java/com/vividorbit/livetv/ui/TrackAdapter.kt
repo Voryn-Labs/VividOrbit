@@ -30,39 +30,17 @@ class TrackAdapter(
 
     class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val nameText: TextView = itemView.findViewById(R.id.category_name)
-        private val indicatorView: View = itemView.findViewById(R.id.category_indicator)
 
         fun bind(track: TvTrackInfo, isSelected: Boolean, onClick: (TvTrackInfo) -> Unit) {
             val locale = Locale(track.language ?: "")
             var displayName = locale.displayLanguage.ifEmpty { track.language ?: "Unknown" }
             if (isSelected) {
-                displayName += " (Current)"
+                displayName += "  ·  Current"
             }
             nameText.text = displayName
-            // This row reuses item_category.xml, which has a selection dot
-            // and a "selected" background/text-color state - previously
-            // neither was ever set here, so the dot showed on every row and
-            // the currently-selected track was only distinguishable by the
-            // "(Current)" text suffix.
+            // Selection is shown by the row's own background/outline plus the
+            // "Current" text suffix above - no separate indicator dot.
             itemView.isSelected = isSelected
-            indicatorView.visibility = if (isSelected) View.VISIBLE else View.INVISIBLE
-
-            itemView.setOnFocusChangeListener { view, hasFocus ->
-                view.animate().cancel()
-                if (hasFocus) {
-                    view.animate()
-                        .scaleX(1.02f)
-                        .scaleY(1.02f)
-                        .setDuration(160)
-                        .start()
-                } else {
-                    view.animate()
-                        .scaleX(1.0f)
-                        .scaleY(1.0f)
-                        .setDuration(160)
-                        .start()
-                }
-            }
 
             itemView.setOnClickListener {
                 onClick(track)
