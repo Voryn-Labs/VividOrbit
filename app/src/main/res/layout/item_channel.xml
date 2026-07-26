@@ -18,9 +18,9 @@
         android:layout_height="32dp"
         android:gravity="center"
         android:background="@drawable/badge_number_bg"
+        android:fontFamily="sans-serif-medium"
         android:textColor="@color/badge_text"
         android:textSize="15sp"
-        android:textStyle="bold"
         android:text="12" />
 
     <ImageView
@@ -38,10 +38,11 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
+        android:fontFamily="sans-serif-medium"
         android:textColor="@color/item_text_color_selector"
         android:textSize="16sp"
-        android:textStyle="bold"
         android:ellipsize="end"
         android:maxLines="1"
         android:text="Channel Name" />
+
 </LinearLayout>

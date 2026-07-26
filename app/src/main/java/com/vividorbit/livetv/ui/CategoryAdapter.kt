@@ -20,17 +20,18 @@ class CategoryAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val category = categories[position]
-        holder.bind(category, category == selectedCategory, onCategoryClick = { clickedCat ->
-            val oldPos = categories.indexOf(selectedCategory)
-            selectedCategory = clickedCat
-            if (oldPos != -1) notifyItemChanged(oldPos)
-            notifyItemChanged(position)
-            onCategoryClick(clickedCat)
-        })
+        holder.bind(category, category == selectedCategory, onCategoryClick)
     }
 
     override fun getItemCount(): Int = categories.size
 
+    /**
+     * Single source of truth for the selected category. Callers should call
+     * this once their own filtering/selection logic completes, rather than
+     * the adapter tracking selection itself - previously both the click
+     * handler here and MainActivity's follow-up call updated selection
+     * state independently, which was redundant and easy to get out of sync.
+     */
     fun setSelectedCategory(category: String) {
         val oldPos = categories.indexOf(selectedCategory)
         selectedCategory = category

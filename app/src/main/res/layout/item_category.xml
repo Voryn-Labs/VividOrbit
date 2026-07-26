@@ -14,20 +14,21 @@
 
     <View
         android:id="@+id/category_indicator"
-        android:layout_width="6dp"
-        android:layout_height="6dp"
-        android:layout_marginEnd="12dp"
-        android:background="@drawable/badge_number_bg" />
+        android:layout_width="4dp"
+        android:layout_height="22dp"
+        android:layout_marginEnd="14dp"
+        android:background="@drawable/accent_bar" />
 
     <TextView
         android:id="@+id/category_name"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
+        android:fontFamily="sans-serif-medium"
         android:textColor="@color/item_text_color_selector"
         android:textSize="16sp"
-        android:textStyle="bold"
         android:ellipsize="end"
         android:maxLines="1"
         android:text="Category Name" />
+
 </LinearLayout>

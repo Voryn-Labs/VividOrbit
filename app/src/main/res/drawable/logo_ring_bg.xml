@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Focused row: a thin gradient "glow ring" outline rather than a solid
-     filled block - reads as premium/deliberate instead of a flat highlight. -->
+<!-- Literal "orbit ring" around the live channel's logo - a gradient ring
+     frame with the logo sitting inside it, tying the banner directly back
+     to the app's own name rather than being an arbitrary decoration. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
-        <shape android:shape="rectangle">
-            <corners android:radius="12dp" />
+        <shape android:shape="oval">
             <gradient
                 android:type="linear"
                 android:angle="45"
@@ -17,8 +17,7 @@
         android:bottom="2dp"
         android:left="2dp"
         android:right="2dp">
-        <shape android:shape="rectangle">
-            <corners android:radius="10dp" />
+        <shape android:shape="oval">
             <solid android:color="@color/row_focus_bg" />
         </shape>
     </item>
