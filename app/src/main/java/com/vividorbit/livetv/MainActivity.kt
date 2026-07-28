@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewTreeObserver
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.ProgressBar
@@ -21,10 +22,8 @@ import com.vividorbit.livetv.data.ChannelRepository
 import com.vividorbit.livetv.player.TvViewHelper
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
-import com.vividorbit.livetv.ui.CategoryAdapter
 import com.vividorbit.livetv.ui.ChannelAdapter
 import com.vividorbit.livetv.ui.ChannelLogoLoader
-import com.vividorbit.livetv.ui.TrackAdapter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -47,11 +46,6 @@ class MainActivity : Activity(), CoroutineScope {
     private lateinit var sidebarContainer: View
     private lateinit var sidebarHeader: TextView
     private lateinit var channelRecyclerView: RecyclerView
-    private lateinit var categoryContainer: View
-    private lateinit var categoryRecyclerView: RecyclerView
-    private lateinit var audioContainer: View
-    private lateinit var restartAudioRow: View
-    private lateinit var trackRecyclerView: RecyclerView
     private lateinit var numericEntryCard: CardView
     private lateinit var numericEntryText: TextView
     private lateinit var noChannelsText: TextView
@@ -91,12 +85,8 @@ class MainActivity : Activity(), CoroutineScope {
     }
 
     private lateinit var channelAdapter: ChannelAdapter
-    private lateinit var categoryAdapter: CategoryAdapter
 
     private var allChannels: List<Channel> = emptyList()
-    private var filteredChannels: List<Channel> = emptyList()
-    private var categories: List<String> = emptyList()
-    private var currentCategory: String = "All Channels"
     private var selectedChannel: Channel? = null
 
     private var numericBuffer = ""
@@ -122,14 +112,25 @@ class MainActivity : Activity(), CoroutineScope {
         private const val SIDEBAR_AUTO_HIDE_MS = 20000L
         private const val BANNER_AUTO_HIDE_MS = 6000L
         private const val NUMERIC_ENTRY_TIMEOUT_MS = 3000L
+        private const val NUMERIC_ENTRY_MAX_DIGITS = 4
 
-        // Persists only the last-watched channel/category. Since the app now
-        // fully exits whenever it's left (see onStop()), this is what makes
-        // the next launch resume where you left off instead of always
+        // How long to wait after a tune (or after a channel that's already
+        // playing starts re-buffering) before showing the loading indicator,
+        // and how long after *that* to give up and show "Channel
+        // Unavailable" if it never resolves. The exact right values here
+        // depend on how long this specific tuner hardware actually takes to
+        // lock a signal in practice - these are reasonable starting points,
+        // not verified against real hardware.
+        private const val TUNING_SHOW_DELAY_MS = 400L
+        private const val TUNING_FALLBACK_TIMEOUT_MS = 8000L
+        private const val SUSTAINED_BUFFERING_THRESHOLD_MS = 3000L
+
+        // Persists only the last-watched channel. Since the app now fully
+        // exits whenever it's left (see onStop()), this is what makes the
+        // next launch resume where you left off instead of always
         // restarting on the first channel.
         private const val PREFS_NAME = "vividorbit_prefs"
         private const val PREF_LAST_CHANNEL_ID = "last_channel_id"
-        private const val PREF_LAST_CATEGORY = "last_category"
     }
 
     private val prefs by lazy { getSharedPreferences(PREFS_NAME, MODE_PRIVATE) }
@@ -151,11 +152,6 @@ class MainActivity : Activity(), CoroutineScope {
         sidebarContainer = findViewById(R.id.sidebar_container)
         sidebarHeader = findViewById(R.id.sidebar_header)
         channelRecyclerView = findViewById(R.id.channel_recycler_view)
-        categoryContainer = findViewById(R.id.category_container)
-        categoryRecyclerView = findViewById(R.id.category_recycler_view)
-        audioContainer = findViewById(R.id.audio_container)
-        restartAudioRow = findViewById(R.id.restart_audio_row)
-        trackRecyclerView = findViewById(R.id.track_recycler_view)
         numericEntryCard = findViewById(R.id.numeric_entry_card)
         numericEntryText = findViewById(R.id.numeric_entry_text)
         noChannelsText = findViewById(R.id.no_channels_text)
@@ -178,7 +174,14 @@ class MainActivity : Activity(), CoroutineScope {
                 mediaSession.setPlaybackState(stateBuilder.build())
             },
             onVideoUnavailable = { reason ->
+                // Cancelled unconditionally up front (previously only
+                // showProgressRunnable was cleared here) - otherwise a
+                // second VIDEO_UNAVAILABLE_REASON_TUNING callback in the same
+                // tune sequence could stack a second hideProgressFallback
+                // call on top of the first, hiding the spinner prematurely.
                 progressHandler.removeCallbacks(showProgressRunnable)
+                progressHandler.removeCallbacks(hideProgressFallbackRunnable)
+
                 val stateBuilder = PlaybackState.Builder()
                     .setState(PlaybackState.STATE_STOPPED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0.0f)
                 mediaSession.setPlaybackState(stateBuilder.build())
@@ -186,45 +189,55 @@ class MainActivity : Activity(), CoroutineScope {
                 when {
                     reason == TvInputManager.VIDEO_UNAVAILABLE_REASON_TUNING -> {
                         // Genuine channel change in progress - show the loading indicator.
-                        progressHandler.postDelayed(showProgressRunnable, 400)
-                        progressHandler.postDelayed(hideProgressFallbackRunnable, 5000)
+                        progressHandler.postDelayed(showProgressRunnable, TUNING_SHOW_DELAY_MS)
+                        progressHandler.postDelayed(hideProgressFallbackRunnable, TUNING_FALLBACK_TIMEOUT_MS)
                     }
                     reason == TvInputManager.VIDEO_UNAVAILABLE_REASON_BUFFERING && !tvViewHelper.hasStartedPlayback() -> {
                         // Still buffering the very first frame after a tune - show the indicator.
-                        progressHandler.postDelayed(showProgressRunnable, 400)
-                        progressHandler.postDelayed(hideProgressFallbackRunnable, 5000)
+                        progressHandler.postDelayed(showProgressRunnable, TUNING_SHOW_DELAY_MS)
+                        progressHandler.postDelayed(hideProgressFallbackRunnable, TUNING_FALLBACK_TIMEOUT_MS)
                     }
                     reason == TvInputManager.VIDEO_UNAVAILABLE_REASON_BUFFERING -> {
-                        // Transient re-buffering blip on a channel that's already
-                        // playing - audio/video are typically still flowing
-                        // underneath, so don't throw a loading overlay over an
-                        // already-playing channel.
-                        progressHandler.removeCallbacks(hideProgressFallbackRunnable)
+                        // Re-buffering on a channel that's already played
+                        // before. A brief blip shouldn't throw a loading
+                        // overlay over an already-playing picture - but a
+                        // genuine, sustained signal loss still needs to be
+                        // visible, not silently invisible forever (this
+                        // previously never showed anything at all once a
+                        // channel had played once, however long the loss).
+                        progressHandler.postDelayed(showProgressRunnable, SUSTAINED_BUFFERING_THRESHOLD_MS)
+                        progressHandler.postDelayed(
+                            hideProgressFallbackRunnable,
+                            SUSTAINED_BUFFERING_THRESHOLD_MS + TUNING_FALLBACK_TIMEOUT_MS
+                        )
                     }
                     else -> {
-                        progressHandler.removeCallbacks(hideProgressFallbackRunnable)
-                        progressBar.visibility = View.GONE
-                        channelUnavailableText.visibility = View.VISIBLE
+                        showChannelUnavailable()
                     }
                 }
+            },
+            onInputError = {
+                // Hard failures previously had no handling at all: a lost
+                // connection to the tuner input service, a tuner-level
+                // error, or a content-rating block would just leave the app
+                // sitting on a frozen frame with zero feedback.
+                val stateBuilder = PlaybackState.Builder()
+                    .setState(PlaybackState.STATE_STOPPED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0.0f)
+                mediaSession.setPlaybackState(stateBuilder.build())
+                showChannelUnavailable()
             }
         )
         repository = ChannelRepository(this)
 
-        // A plain, always-visible menu item instead of a hidden colored
-        // remote button - anyone can find and use audio recovery this way.
-        restartAudioRow.setOnClickListener {
-            tvViewHelper.recoverAudio()
-            hideAudioPanel()
-            channelRecyclerView.requestFocus()
-        }
-
-        // Set up recyclerview layouts
+        // Set up recyclerview layout
         channelRecyclerView.layoutManager = LinearLayoutManager(this)
         channelRecyclerView.setHasFixedSize(true)
-        categoryRecyclerView.layoutManager = LinearLayoutManager(this)
-        categoryRecyclerView.setHasFixedSize(true)
-        trackRecyclerView.layoutManager = LinearLayoutManager(this)
+        // Default add/change animations were the main cause of the guide
+        // "jumping then sliding" when it opens - a changed-item cross-fade
+        // animation was firing at the same moment the list scrolled to the
+        // current channel, with no stable prior layout to animate from.
+        channelRecyclerView.itemAnimator = null
+        applyCenteringPadding(channelRecyclerView)
 
         // Check for TV EPG Provider permissions at runtime
         val missing = REQUIRED_PERMISSIONS.filter {
@@ -242,21 +255,9 @@ class MainActivity : Activity(), CoroutineScope {
         launch {
             progressBar.visibility = View.VISIBLE
             allChannels = repository.getChannels()
-            categories = repository.getCategories(allChannels)
 
-            // Restore whichever category the user was last viewing, if it
-            // still exists (e.g. a fresh channel scan could have removed it).
-            val restoredCategory = prefs.getString(PREF_LAST_CATEGORY, "All Channels") ?: "All Channels"
-            currentCategory = if (categories.contains(restoredCategory)) restoredCategory else "All Channels"
-            filteredChannels = if (currentCategory == "All Channels") {
-                allChannels
-            } else {
-                allChannels.filter { repository.cleanInputName(it.inputId) == currentCategory }
-            }
-
-            // Setup Adapters
             channelAdapter = ChannelAdapter(
-                channels = filteredChannels,
+                channels = allChannels,
                 scope = this@MainActivity,
                 onChannelClick = { channel ->
                     tuneToChannel(channel)
@@ -265,19 +266,8 @@ class MainActivity : Activity(), CoroutineScope {
             )
             channelRecyclerView.adapter = channelAdapter
 
-            categoryAdapter = CategoryAdapter(
-                categories = categories,
-                selectedCategory = currentCategory,
-                onCategoryClick = { category ->
-                    filterChannels(category)
-                    categoryContainer.visibility = View.GONE
-                    channelRecyclerView.requestFocus()
-                }
-            )
-            categoryRecyclerView.adapter = categoryAdapter
-
             progressBar.visibility = View.GONE
-            updateSidebarHeader(currentCategory, filteredChannels.size)
+            updateSidebarHeader(allChannels.size)
 
             // Resume on whichever channel was last playing, falling back to
             // the first available channel if it no longer exists (e.g.
@@ -286,38 +276,29 @@ class MainActivity : Activity(), CoroutineScope {
                 val lastChannelId = prefs.getLong(PREF_LAST_CHANNEL_ID, -1L)
                 val startChannel = allChannels.find { it.id == lastChannelId } ?: allChannels[0]
                 tuneToChannel(startChannel)
-            }
-
-            // Show sidebar on launch so the interface is visible immediately
-            showSidebar()
-        }
-    }
-
-    private fun filterChannels(category: String) {
-        currentCategory = category
-        categoryAdapter.setSelectedCategory(category)
-
-        // Compute the filtered list off the main thread - with large channel
-        // counts (common on satellite/cable tuners), filtering plus the
-        // subsequent diff pass can be expensive enough to visibly stall the
-        // guide UI if done synchronously here.
-        launch(Dispatchers.Default) {
-            val newFiltered = if (category == "All Channels") {
-                allChannels
+                // Deliberately NOT opening the guide here - the app should
+                // launch straight into live TV with just the channel banner
+                // (which hides itself after BANNER_AUTO_HIDE_MS). The guide
+                // only opens when the user actually asks for it.
             } else {
-                allChannels.filter { repository.cleanInputName(it.inputId) == category }
-            }
-            withContext(Dispatchers.Main) {
-                filteredChannels = newFiltered
-                channelAdapter.updateChannels(newFiltered)
-                updateSidebarHeader(category, newFiltered.size)
+                // Nothing to play - show the guide so the "no channels found"
+                // message is visible instead of a blank screen with no
+                // explanation.
+                showSidebar()
             }
         }
     }
 
-    private fun updateSidebarHeader(category: String, count: Int) {
-        sidebarHeader.text = getString(R.string.sidebar_header_format, category, count)
+    private fun updateSidebarHeader(count: Int) {
+        sidebarHeader.text = getString(R.string.sidebar_header_format, count)
         noChannelsText.visibility = if (count == 0) View.VISIBLE else View.GONE
+    }
+
+    private fun showChannelUnavailable() {
+        progressHandler.removeCallbacks(showProgressRunnable)
+        progressHandler.removeCallbacks(hideProgressFallbackRunnable)
+        progressBar.visibility = View.GONE
+        channelUnavailableText.visibility = View.VISIBLE
     }
 
     private fun tuneToChannel(channel: Channel) {
@@ -325,7 +306,6 @@ class MainActivity : Activity(), CoroutineScope {
         selectedChannel = channel
         prefs.edit()
             .putLong(PREF_LAST_CHANNEL_ID, channel.id)
-            .putString(PREF_LAST_CATEGORY, currentCategory)
             .apply()
         showBottomBanner(channel)
         channelUnavailableText.visibility = View.GONE
@@ -343,7 +323,7 @@ class MainActivity : Activity(), CoroutineScope {
 
         progressHandler.removeCallbacks(showProgressRunnable)
         progressHandler.removeCallbacks(hideProgressFallbackRunnable)
-        progressHandler.postDelayed(showProgressRunnable, 400)
+        progressHandler.postDelayed(showProgressRunnable, TUNING_SHOW_DELAY_MS)
         tvViewHelper.tune(channel.inputId, channel.id, TvContract.buildChannelUri(channel.id))
     }
 
@@ -381,21 +361,20 @@ class MainActivity : Activity(), CoroutineScope {
     }
 
     private fun navigateChannel(direction: Int) {
-        val listToNavigate = if (filteredChannels.isNotEmpty()) filteredChannels else allChannels
-        if (listToNavigate.isEmpty()) return
+        if (allChannels.isEmpty()) return
 
         val current = pendingZapChannel ?: selectedChannel
         var nextIndex = 0
         if (current != null) {
-            val currentIndex = listToNavigate.indexOfFirst { it.id == current.id }
+            val currentIndex = allChannels.indexOfFirst { it.id == current.id }
             if (currentIndex != -1) {
-                nextIndex = (currentIndex + direction) % listToNavigate.size
+                nextIndex = (currentIndex + direction) % allChannels.size
                 if (nextIndex < 0) {
-                    nextIndex += listToNavigate.size
+                    nextIndex += allChannels.size
                 }
             }
         }
-        val targetChannel = listToNavigate[nextIndex]
+        val targetChannel = allChannels[nextIndex]
 
         // Instant feedback on every press: update the selection and banner
         // right away so navigation still feels responsive.
@@ -411,9 +390,33 @@ class MainActivity : Activity(), CoroutineScope {
     }
 
     private fun isAnyMenuVisible(): Boolean {
-        return sidebarContainer.visibility == View.VISIBLE ||
-                categoryContainer.visibility == View.VISIBLE ||
-                audioContainer.visibility == View.VISIBLE
+        return sidebarContainer.visibility == View.VISIBLE
+    }
+
+    /**
+     * Gives a RecyclerView generous top/bottom padding (half its own height)
+     * plus clipToPadding = false, so that even the first or last row has
+     * somewhere to scroll to in order to reach the vertical center - without
+     * this, an edge row physically cannot be centered since there's no real
+     * content above/below it to scroll through. Combined with
+     * View.centerInParentOnFocus() on each row, this is what makes the whole
+     * list scroll behind a fixed, centered highlight.
+     *
+     * Deferred until the RecyclerView actually has a real height, since
+     * these panels start as View.GONE and have no layout at all until first
+     * shown.
+     */
+    private fun applyCenteringPadding(recyclerView: RecyclerView) {
+        recyclerView.clipToPadding = false
+        recyclerView.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
+            override fun onGlobalLayout() {
+                val height = recyclerView.height
+                if (height > 0) {
+                    recyclerView.setPadding(recyclerView.paddingLeft, height / 2, recyclerView.paddingRight, height / 2)
+                    recyclerView.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                }
+            }
+        })
     }
 
     private fun tuneToChannelNumber(number: String) {
@@ -441,7 +444,7 @@ class MainActivity : Activity(), CoroutineScope {
         // wrong (or an off-screen) row.
         val activeChannel = selectedChannel
         val index = if (activeChannel != null) {
-            filteredChannels.indexOfFirst { it.id == activeChannel.id }
+            allChannels.indexOfFirst { it.id == activeChannel.id }
         } else {
             -1
         }
@@ -465,35 +468,7 @@ class MainActivity : Activity(), CoroutineScope {
 
     private fun hideSidebar() {
         sidebarContainer.visibility = View.GONE
-        categoryContainer.visibility = View.GONE
         sidebarHandler.removeCallbacks(hideSidebarRunnable)
-    }
-
-    private fun showAudioPanel() {
-        val tracks = tvViewHelper.getAudioTracks()
-        val currentTrackId = tvViewHelper.getSelectedAudioTrack()
-
-        // Only show the language list at all if there's an actual choice to
-        // make - otherwise "Restart Sound" is the only relevant action.
-        if (tracks.size > 1) {
-            val adapter = TrackAdapter(tracks, currentTrackId) { track ->
-                tvViewHelper.selectAudioTrack(track.id)
-                hideAudioPanel()
-                channelRecyclerView.requestFocus()
-            }
-            trackRecyclerView.adapter = adapter
-            trackRecyclerView.visibility = View.VISIBLE
-        } else {
-            trackRecyclerView.visibility = View.GONE
-        }
-
-        audioContainer.visibility = View.VISIBLE
-        restartAudioRow.requestFocus()
-        resetSidebarTimer()
-    }
-
-    private fun hideAudioPanel() {
-        audioContainer.visibility = View.GONE
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
@@ -503,6 +478,15 @@ class MainActivity : Activity(), CoroutineScope {
             if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
                 numericHandler.removeCallbacks(tuneRunnable)
                 tuneRunnable.run()
+                return true
+            }
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                // Previously fell through to the system default, which -
+                // since nothing else claimed it - exited the whole app
+                // instead of just dismissing the number entry.
+                numericHandler.removeCallbacks(tuneRunnable)
+                numericBuffer = ""
+                numericEntryCard.visibility = View.GONE
                 return true
             }
         }
@@ -533,72 +517,21 @@ class MainActivity : Activity(), CoroutineScope {
         // other overlay is open, matching how arrow-key zapping behaves.
         if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
             if (!isAnyMenuVisible()) {
-                val digit = (keyCode - KeyEvent.KEYCODE_0).toString()
-                numericHandler.removeCallbacks(tuneRunnable)
-                numericBuffer += digit
-                numericEntryText.text = numericBuffer
-                numericEntryCard.visibility = View.VISIBLE
-                numericHandler.postDelayed(tuneRunnable, NUMERIC_ENTRY_TIMEOUT_MS)
-                return true
-            }
-        }
-
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (audioContainer.visibility == View.VISIBLE) {
-                hideAudioPanel()
-                channelRecyclerView.requestFocus()
-                return true
-            }
-            if (categoryContainer.visibility == View.VISIBLE) {
-                categoryContainer.visibility = View.GONE
-                channelRecyclerView.requestFocus()
-                return true
-            }
-            if (sidebarContainer.visibility == View.VISIBLE) {
-                hideSidebar()
-                return true
-            }
-        }
-
-        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-            if (audioContainer.visibility == View.VISIBLE) {
-                // Sound was opened via the right side - left is its mirrored
-                // "back" direction, matching how right closes Categories below.
-                hideAudioPanel()
-                channelRecyclerView.requestFocus()
-                return true
-            }
-            if (sidebarContainer.visibility == View.VISIBLE && categoryContainer.visibility != View.VISIBLE) {
-                categoryContainer.visibility = View.VISIBLE
-                // Same scroll-before-focus ordering fix as showSidebar() below.
-                val catIndex = categories.indexOf(currentCategory)
-                if (catIndex != -1) {
-                    categoryRecyclerView.scrollToPosition(catIndex)
-                    categoryRecyclerView.post {
-                        val holder = categoryRecyclerView.findViewHolderForAdapterPosition(catIndex)
-                        if (holder != null) {
-                            holder.itemView.requestFocus()
-                        } else {
-                            categoryRecyclerView.requestFocus()
-                        }
-                    }
-                } else {
-                    categoryRecyclerView.requestFocus()
+                if (numericBuffer.length < NUMERIC_ENTRY_MAX_DIGITS) {
+                    val digit = (keyCode - KeyEvent.KEYCODE_0).toString()
+                    numericHandler.removeCallbacks(tuneRunnable)
+                    numericBuffer += digit
+                    numericEntryText.text = numericBuffer
+                    numericEntryCard.visibility = View.VISIBLE
+                    numericHandler.postDelayed(tuneRunnable, NUMERIC_ENTRY_TIMEOUT_MS)
                 }
                 return true
             }
         }
 
-        if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-            if (categoryContainer.visibility == View.VISIBLE) {
-                categoryContainer.visibility = View.GONE
-                channelRecyclerView.requestFocus()
-                return true
-            }
-            if (sidebarContainer.visibility == View.VISIBLE && audioContainer.visibility != View.VISIBLE) {
-                // Mirrors Categories on the left - reachable by simple D-pad
-                // exploration from the main guide, no hidden button needed.
-                showAudioPanel()
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            if (sidebarContainer.visibility == View.VISIBLE) {
+                hideSidebar()
                 return true
             }
         }
@@ -618,18 +551,6 @@ class MainActivity : Activity(), CoroutineScope {
                 hideSidebar()
                 return true
             }
-        }
-
-        // Legacy shortcuts for remotes that do have these keys - the D-pad
-        // path above (channel list -> right) is the primary, discoverable one.
-        if (keyCode == KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK || keyCode == KeyEvent.KEYCODE_PROG_RED) {
-            showAudioPanel()
-            return true
-        }
-
-        if (keyCode == KeyEvent.KEYCODE_PROG_GREEN) {
-            tvViewHelper.recoverAudio()
-            return true
         }
 
         return super.onKeyDown(keyCode, event)
@@ -689,6 +610,10 @@ class MainActivity : Activity(), CoroutineScope {
         numericHandler.removeCallbacksAndMessages(null)
         zapHandler.removeCallbacksAndMessages(null)
         job.cancel()
+        // Order matters here: detach the callback first, then reset. If we
+        // reset() first while still connected, a resulting callback (e.g.
+        // onVideoUnavailable) could fire and try to touch mediaSession
+        // (already released above) or views that are mid-teardown.
         tvViewHelper.cleanup()
         tvViewHelper.reset()
     }

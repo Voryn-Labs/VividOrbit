@@ -85,6 +85,10 @@ class ChannelAdapter(
         private val nameText: TextView = itemView.findViewById(R.id.channel_name)
         private var imageJob: Job? = null
 
+        init {
+            itemView.centerInParentOnFocus()
+        }
+
         fun bind(channel: Channel, isCurrentlyPlaying: Boolean, onClick: (Channel) -> Unit) {
             numberText.text = channel.displayNumber
             nameText.text = channel.displayName

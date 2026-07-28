@@ -3,11 +3,16 @@ package com.vividorbit.livetv.data
 import android.content.Context
 import android.database.Cursor
 import android.media.tv.TvContract
-import android.net.Uri
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class ChannelRepository(private val context: Context) {
+
+    companion object {
+        private const val TAG = "ChannelRepository"
+    }
 
     suspend fun getChannels(): List<Channel> = withContext(Dispatchers.IO) {
         val channels = mutableListOf<Channel>()
@@ -46,45 +51,29 @@ class ChannelRepository(private val context: Context) {
                     channels.add(Channel(id, number, name, inputId, logoUri))
                 }
             }
+        } catch (e: CancellationException) {
+            // A cancelled coroutine (e.g. the activity was torn down mid-load)
+            // is expected, cooperative behavior, not an error - it must be
+            // rethrown so the coroutine machinery actually completes the
+            // cancellation, and shouldn't be logged as if something broke.
+            throw e
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "Error loading channels: ${e.message}", e)
         } finally {
             cursor?.close()
         }
-        
-        // Sort channels by display number naturally
-        channels.sortBy {
-            it.displayNumber.toIntOrNull() ?: Int.MAX_VALUE
-        }
+
+        // Sort numerically-numbered channels first (in numeric order), then
+        // any alphanumeric ones after (alphabetically among themselves,
+        // rather than left in whatever arbitrary order the cursor returned
+        // them in).
+        channels.sortWith(
+            compareBy(
+                { it.displayNumber.toIntOrNull() == null },
+                { it.displayNumber.toIntOrNull() ?: Int.MAX_VALUE },
+                { it.displayNumber }
+            )
+        )
         channels
-    }
-
-    suspend fun getCategories(channels: List<Channel>): List<String> = withContext(Dispatchers.Default) {
-        val categories = mutableListOf<String>()
-        categories.add("All Channels")
-        
-        val inputs = channels.map { it.inputId }.distinct()
-        for (input in inputs) {
-            if (input.isNotEmpty()) {
-                val cleanName = cleanInputName(input)
-                categories.add(cleanName)
-            }
-        }
-        categories
-    }
-
-    fun cleanInputName(inputId: String): String {
-        val part = inputId.substringAfterLast('.')
-        var name = part.substringBefore('/')
-        if (name.endsWith("Service")) {
-            name = name.removeSuffix("Service")
-        }
-        if (name.endsWith("Input")) {
-            name = name.removeSuffix("Input")
-        }
-        if (name.endsWith("Tv")) {
-            name = name.removeSuffix("Tv")
-        }
-        return name.ifEmpty { "External Source" }
     }
 }

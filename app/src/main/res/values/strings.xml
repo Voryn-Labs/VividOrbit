@@ -3,5 +3,5 @@
     <string name="channel_unavailable">Channel Unavailable</string>
     <string name="permission_required">TV listings permission is required to load channels. Please grant it in Settings and restart the app.</string>
     <string name="no_channels_message">No channels found.\nTry running a channel scan on your source.</string>
-    <string name="sidebar_header_format">%1$s \u00B7 %2$d</string>
+    <string name="sidebar_header_format">Channels &#183; %1$d</string>
 </resources>
