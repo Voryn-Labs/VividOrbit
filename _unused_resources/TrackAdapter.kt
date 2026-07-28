@@ -31,6 +31,10 @@ class TrackAdapter(
     class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val nameText: TextView = itemView.findViewById(R.id.category_name)
 
+        init {
+            itemView.centerInParentOnFocus()
+        }
+
         fun bind(track: TvTrackInfo, isSelected: Boolean, onClick: (TvTrackInfo) -> Unit) {
             val locale = Locale(track.language ?: "")
             var displayName = locale.displayLanguage.ifEmpty { track.language ?: "Unknown" }

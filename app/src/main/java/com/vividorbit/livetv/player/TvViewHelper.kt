@@ -1,5 +1,6 @@
 package com.vividorbit.livetv.player
 
+import android.media.tv.TvContentRating
 import android.media.tv.TvTrackInfo
 import android.media.tv.TvView
 import android.net.Uri
@@ -10,7 +11,8 @@ import android.util.Log
 class TvViewHelper(
     private val tvView: TvView,
     private val onVideoAvailable: () -> Unit,
-    private val onVideoUnavailable: (reason: Int) -> Unit
+    private val onVideoUnavailable: (reason: Int) -> Unit,
+    private val onInputError: () -> Unit
 ) {
     companion object {
         private const val TAG = "TvViewHelper"
@@ -19,7 +21,9 @@ class TvViewHelper(
         // is selected is still actually present in the input's current track
         // list. Some tuner HALs silently renegotiate/regenerate track ids
         // when audio glitches, which leaves the "selected" id stale but
-        // non-null - a plain null-check misses that case entirely.
+        // non-null - a plain null-check misses that case entirely. This is
+        // the only audio-recovery mechanism in the app - fully automatic, no
+        // user-facing controls.
         private const val AUDIO_WATCHDOG_INTERVAL_MS = 4000L
     }
 
@@ -66,6 +70,28 @@ class TvViewHelper(
                     lastSelectedAudioTrackId = trackId
                 }
             }
+
+            // These three were previously unhandled entirely - a hard tuner
+            // failure, a lost connection to the input service, or a
+            // content-rating block would leave the app just sitting on a
+            // frozen/stale frame with zero feedback and no recovery attempt.
+            override fun onConnectionFailed(inputId: String) {
+                super.onConnectionFailed(inputId)
+                Log.e(TAG, "Connection failed for input: $inputId")
+                onInputError()
+            }
+
+            override fun onDisconnected(inputId: String) {
+                super.onDisconnected(inputId)
+                Log.w(TAG, "Disconnected from input: $inputId")
+                onInputError()
+            }
+
+            override fun onContentBlocked(inputId: String, rating: TvContentRating) {
+                super.onContentBlocked(inputId, rating)
+                Log.w(TAG, "Content blocked on input $inputId, rating: $rating")
+                onInputError()
+            }
         })
     }
 
@@ -81,7 +107,13 @@ class TvViewHelper(
             watchdogHandler.removeCallbacks(audioWatchdogRunnable)
             watchdogHandler.postDelayed(audioWatchdogRunnable, AUDIO_WATCHDOG_INTERVAL_MS)
         } catch (e: Exception) {
+            // A synchronous failure from tune() itself (e.g. invalid state)
+            // previously just got logged, leaving selectedChannel/UI already
+            // updated to the new channel while the picture never actually
+            // changed - a real, visible inconsistency. Surface it the same
+            // way as any other input failure.
             Log.e(TAG, "Error tuning: ${e.message}", e)
+            onInputError()
         }
     }
 
@@ -108,29 +140,7 @@ class TvViewHelper(
         }
     }
 
-    fun recoverAudio() {
-        try {
-            val audioTracks = getAudioTracks()
-            if (audioTracks.isNotEmpty()) {
-                val currentTrack = getSelectedAudioTrack() ?: audioTracks[0].id
-                Log.d(TAG, "Recovering audio by re-selecting track: $currentTrack")
-                // Toggle off and back on to re-initialize hardware audio sink
-                tvView.selectTrack(TvTrackInfo.TYPE_AUDIO, null)
-                tvView.postDelayed({
-                    try {
-                        tvView.selectTrack(TvTrackInfo.TYPE_AUDIO, currentTrack)
-                        lastSelectedAudioTrackId = currentTrack
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error re-selecting audio track during recovery: ${e.message}", e)
-                    }
-                }, 150)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error recovering audio: ${e.message}", e)
-        }
-    }
-
-    fun getAudioTracks(): List<TvTrackInfo> {
+    private fun getAudioTracks(): List<TvTrackInfo> {
         return try {
             tvView.getTracks(TvTrackInfo.TYPE_AUDIO) ?: emptyList()
         } catch (e: Exception) {
@@ -139,7 +149,7 @@ class TvViewHelper(
         }
     }
 
-    fun selectAudioTrack(trackId: String) {
+    private fun selectAudioTrack(trackId: String) {
         try {
             lastSelectedAudioTrackId = trackId
             tvView.selectTrack(TvTrackInfo.TYPE_AUDIO, trackId)
@@ -148,7 +158,7 @@ class TvViewHelper(
         }
     }
 
-    fun getSelectedAudioTrack(): String? {
+    private fun getSelectedAudioTrack(): String? {
         return try {
             tvView.getSelectedTrack(TvTrackInfo.TYPE_AUDIO)
         } catch (e: Exception) {

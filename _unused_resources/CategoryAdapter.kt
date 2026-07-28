@@ -41,6 +41,10 @@ class CategoryAdapter(
     class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val nameText: TextView = itemView.findViewById(R.id.category_name)
 
+        init {
+            itemView.centerInParentOnFocus()
+        }
+
         fun bind(category: String, isSelected: Boolean, onCategoryClick: (String) -> Unit) {
             nameText.text = category
             // Selection is shown purely by the row's own background/outline
