@@ -35,6 +35,11 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
     implementation 'androidx.leanback:leanback:1.0.0'
+    // Explicit, even though leanback likely pulls this in transitively -
+    // MainActivity.kt and activity_main.xml reference CardView directly, so
+    // it shouldn't depend on another library's internal implementation
+    // detail to be present.
+    implementation 'androidx.cardview:cardview:1.0.0'
     
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
 

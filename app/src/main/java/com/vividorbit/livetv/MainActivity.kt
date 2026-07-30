@@ -360,7 +360,7 @@ class MainActivity : Activity(), CoroutineScope {
         bannerHandler.postDelayed(hideBannerRunnable, BANNER_AUTO_HIDE_MS)
     }
 
-    private fun navigateChannel(direction: Int) {
+    private fun navigateChannel(direction: Int, isRepeat: Boolean) {
         if (allChannels.isEmpty()) return
 
         val current = pendingZapChannel ?: selectedChannel
@@ -382,11 +382,21 @@ class MainActivity : Activity(), CoroutineScope {
         selectedChannel = targetChannel
         showBottomBanner(targetChannel)
 
-        // Debounce the actual hardware tune so holding/rapidly pressing
-        // channel up/down doesn't queue up a real tune() per key-repeat
-        // event - only the channel the user settles on gets tuned.
-        zapHandler.removeCallbacks(zapTuneRunnable)
-        zapHandler.postDelayed(zapTuneRunnable, ZAP_DEBOUNCE_MS)
+        if (isRepeat) {
+            // The button is being held down (a genuine key-repeat event, not
+            // a fresh press) - debounce so the flood of repeat events
+            // doesn't queue up a real tune() per event; only the channel the
+            // user finally settles on gets tuned.
+            zapHandler.removeCallbacks(zapTuneRunnable)
+            zapHandler.postDelayed(zapTuneRunnable, ZAP_DEBOUNCE_MS)
+        } else {
+            // A single, deliberate press - tune immediately rather than
+            // waiting out the debounce window for no reason. Cancel any
+            // still-pending debounced tune from a previous held sequence so
+            // it can't fire late and override this one.
+            zapHandler.removeCallbacks(zapTuneRunnable)
+            tuneToChannel(targetChannel)
+        }
     }
 
     private fun isAnyMenuVisible(): Boolean {
@@ -454,6 +464,18 @@ class MainActivity : Activity(), CoroutineScope {
             channelRecyclerView.post {
                 val holder = channelRecyclerView.findViewHolderForAdapterPosition(index)
                 if (holder != null) {
+                    // Center instantly rather than waiting for the row's own
+                    // focus-triggered smooth scroll (see
+                    // View.centerInParentOnFocus()) - the guide should
+                    // already look centered the instant it appears, not
+                    // visibly glide into position. Smooth centering still
+                    // applies normally once you're actively browsing.
+                    val itemCenter = holder.itemView.top + holder.itemView.height / 2
+                    val recyclerCenter = channelRecyclerView.height / 2
+                    val delta = itemCenter - recyclerCenter
+                    if (delta != 0) {
+                        channelRecyclerView.scrollBy(0, delta)
+                    }
                     holder.itemView.requestFocus()
                 } else {
                     channelRecyclerView.requestFocus()
@@ -492,23 +514,23 @@ class MainActivity : Activity(), CoroutineScope {
         }
 
         if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP) {
-            navigateChannel(1)
+            navigateChannel(1, event.repeatCount > 0)
             return true
         }
         if (keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN) {
-            navigateChannel(-1)
+            navigateChannel(-1, event.repeatCount > 0)
             return true
         }
 
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
             if (!isAnyMenuVisible()) {
-                navigateChannel(-1)
+                navigateChannel(-1, event.repeatCount > 0)
                 return true
             }
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
             if (!isAnyMenuVisible()) {
-                navigateChannel(1)
+                navigateChannel(1, event.repeatCount > 0)
                 return true
             }
         }
