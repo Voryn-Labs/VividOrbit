@@ -4,6 +4,7 @@
 [![Target SDK](https://img.shields.io/badge/Target%20SDK-34-blue.svg)](https://developer.android.com)
 [![Language](https://img.shields.io/badge/Language-Kotlin-orange.svg)](https://kotlinlang.org/)
 [![Platform](https://img.shields.io/badge/Platform-Android%20TV-red.svg)](https://developer.android.com/tv)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 **VividOrbit** is a modern, high-performance Live TV application engineered for Android TV and set-top box hardware. Built directly on top of Android's `TvView` and `TvContract` framework, VividOrbit provides a seamless, television-native tuning and channel management experience with hardware tuner integration (Dtvkit / Droidlogic).
 
@@ -101,4 +102,4 @@ To build the release APK:
 
 ## 📜 License
 
-Distributed under standard terms. See workspace files for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
