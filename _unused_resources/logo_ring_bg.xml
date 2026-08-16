@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Literal "orbit ring" around the live channel's logo - a gradient ring
-     frame with the logo sitting inside it, tying the banner directly back
-     to the app's own name rather than being an arbitrary decoration. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="oval">

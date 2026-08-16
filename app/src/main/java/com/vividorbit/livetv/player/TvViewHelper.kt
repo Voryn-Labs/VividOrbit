@@ -16,14 +16,6 @@ class TvViewHelper(
 ) {
     companion object {
         private const val TAG = "TvViewHelper"
-
-        // How often we proactively re-validate that the audio track we think
-        // is selected is still actually present in the input's current track
-        // list. Some tuner HALs silently renegotiate/regenerate track ids
-        // when audio glitches, which leaves the "selected" id stale but
-        // non-null - a plain null-check misses that case entirely. This is
-        // the only audio-recovery mechanism in the app - fully automatic, no
-        // user-facing controls.
         private const val AUDIO_WATCHDOG_INTERVAL_MS = 4000L
     }
 
@@ -71,10 +63,6 @@ class TvViewHelper(
                 }
             }
 
-            // These three were previously unhandled entirely - a hard tuner
-            // failure, a lost connection to the input service, or a
-            // content-rating block would leave the app just sitting on a
-            // frozen/stale frame with zero feedback and no recovery attempt.
             override fun onConnectionFailed(inputId: String) {
                 super.onConnectionFailed(inputId)
                 Log.e(TAG, "Connection failed for input: $inputId")
@@ -107,20 +95,13 @@ class TvViewHelper(
             watchdogHandler.removeCallbacks(audioWatchdogRunnable)
             watchdogHandler.postDelayed(audioWatchdogRunnable, AUDIO_WATCHDOG_INTERVAL_MS)
         } catch (e: Exception) {
-            // A synchronous failure from tune() itself (e.g. invalid state)
-            // previously just got logged, leaving selectedChannel/UI already
-            // updated to the new channel while the picture never actually
-            // changed - a real, visible inconsistency. Surface it the same
-            // way as any other input failure.
             Log.e(TAG, "Error tuning: ${e.message}", e)
             onInputError()
         }
     }
 
-    /** True if [channelId] is the channel we last issued a tune() for (whether or not it has produced a frame yet). */
     fun isTunedTo(channelId: Long): Boolean = currentChannelId == channelId
 
-    /** True once the current tune has produced at least one video frame. */
     fun hasStartedPlayback(): Boolean = hasReceivedFirstFrame
 
     private fun ensureAudioTrackSelected() {
@@ -182,9 +163,6 @@ class TvViewHelper(
         } catch (e: Exception) {
             Log.e(TAG, "Error resetting TvView: ${e.message}", e)
         } finally {
-            // Reflect that we're no longer tuned to anything, so a future
-            // tune() call isn't skipped by isTunedTo() thinking nothing
-            // changed.
             currentChannelId = null
             hasReceivedFirstFrame = false
             watchdogHandler.removeCallbacks(audioWatchdogRunnable)

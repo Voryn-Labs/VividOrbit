@@ -1,5 +1,4 @@
 <resources>
-    <!-- Monochrome base. One restrained accent, used only for on-air/live state. -->
     <color name="bg_dark">#0B0B0C</color>
     <color name="panel_bg">#161618</color>
     <color name="panel_bg_elevated">#1D1D20</color>
@@ -12,6 +11,7 @@
     <color name="row_selected_bg">#1B1B1E</color>
     <color name="row_focus_bg">#26262A</color>
 
-    <!-- The only color in the app - reserved exclusively for "on air" / live state -->
     <color name="live_red">#E5484D</color>
+    <color name="toggle_on_green">#30A46C</color>
+    <color name="badge_dth_bg">#222226</color>
 </resources>

@@ -36,11 +36,6 @@ class ChannelAdapter(
 
     override fun getItemCount(): Int = channels.size
 
-    /**
-     * Marks [channelId] as the currently-playing channel so its row is
-     * visually highlighted in the list (reuses the existing selected-state
-     * drawable/color selectors, which previously were never wired up here).
-     */
     fun setCurrentChannel(channelId: Long?) {
         if (currentChannelId == channelId) return
         val oldId = currentChannelId
@@ -55,10 +50,6 @@ class ChannelAdapter(
     fun updateChannels(newChannels: List<Channel>) {
         val oldChannels = channels
 
-        // Compute the diff off the main thread and supersede any in-flight
-        // diff from a previous rapid call - for large channel lists this was
-        // previously run synchronously on the caller's thread and could
-        // visibly stall the guide UI every time a category was switched.
         updateJob?.cancel()
         updateJob = scope.launch(Dispatchers.Default) {
             val diffCallback = object : DiffUtil.Callback() {

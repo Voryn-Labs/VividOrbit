@@ -25,11 +25,6 @@ class CategoryAdapter(
 
     override fun getItemCount(): Int = categories.size
 
-    /**
-     * Single source of truth for the selected category. Callers should call
-     * this once their own filtering/selection logic completes, rather than
-     * the adapter tracking selection itself.
-     */
     fun setSelectedCategory(category: String) {
         val oldPos = categories.indexOf(selectedCategory)
         selectedCategory = category
@@ -47,8 +42,6 @@ class CategoryAdapter(
 
         fun bind(category: String, isSelected: Boolean, onCategoryClick: (String) -> Unit) {
             nameText.text = category
-            // Selection is shown purely by the row's own background/outline
-            // (see item_background_selector.xml) - no separate indicator dot.
             itemView.isSelected = isSelected
 
             itemView.setOnClickListener {

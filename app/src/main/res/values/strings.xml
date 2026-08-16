@@ -4,4 +4,19 @@
     <string name="permission_required">TV listings permission is required to load channels. Please grant it in Settings and restart the app.</string>
     <string name="no_channels_message">No channels found.\nTry running a channel scan on your source.</string>
     <string name="sidebar_header_format">Channels &#183; %1$d</string>
+    <string name="dth_format">DTH: %1$s</string>
+    <string name="settings_title">Channel Settings</string>
+    <string name="settings_btn_text">⚙ Settings</string>
+    <string name="custom_numbers_title">Custom Channel Numbers</string>
+    <string name="custom_numbers_desc">Order channels linearly with custom assigned numbers</string>
+    <string name="toggle_on">ON</string>
+    <string name="toggle_off">OFF</string>
+    <string name="btn_auto_renumber">Auto-Renumber 1..N</string>
+    <string name="btn_reset_dth">Reset to DTH</string>
+    <string name="btn_close">Close</string>
+    <string name="edit_number_title">Assign Channel Number</string>
+    <string name="edit_number_hint">Press 0-9 on remote to enter number</string>
+    <string name="conflict_swap_format">⚠ Number %1$s is used by %2$s. Saving will swap.</string>
+    <string name="btn_save">Save</string>
+    <string name="btn_cancel">Cancel</string>
 </resources>

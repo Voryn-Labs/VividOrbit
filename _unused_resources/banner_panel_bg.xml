@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Banner card background: dark gradient panel with a thin glowing gradient
-     hairline along the top edge - reads like an edge-lit broadcast panel
-     rather than a flat translucent rectangle. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">

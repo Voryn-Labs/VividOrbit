@@ -1,6 +1,8 @@
 package com.vividorbit.livetv
 
 import android.app.Activity
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import android.media.tv.TvContract
 import android.media.tv.TvInputManager
 import android.media.tv.TvView
@@ -9,7 +11,6 @@ import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
 import android.view.View
-import android.view.ViewTreeObserver
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.ProgressBar
@@ -20,10 +21,9 @@ import androidx.recyclerview.widget.RecyclerView
 import com.vividorbit.livetv.data.Channel
 import com.vividorbit.livetv.data.ChannelRepository
 import com.vividorbit.livetv.player.TvViewHelper
-import android.media.session.MediaSession
-import android.media.session.PlaybackState
 import com.vividorbit.livetv.ui.ChannelAdapter
 import com.vividorbit.livetv.ui.ChannelLogoLoader
+import com.vividorbit.livetv.ui.ChannelSettingsAdapter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -45,10 +45,32 @@ class MainActivity : Activity(), CoroutineScope {
     private lateinit var channelUnavailableText: TextView
     private lateinit var sidebarContainer: View
     private lateinit var sidebarHeader: TextView
+    private lateinit var sidebarSettingsBtn: TextView
     private lateinit var channelRecyclerView: RecyclerView
     private lateinit var numericEntryCard: CardView
     private lateinit var numericEntryText: TextView
     private lateinit var noChannelsText: TextView
+
+    private lateinit var settingsContainer: View
+    private lateinit var settingsCloseBtn: TextView
+    private lateinit var settingsToggleRow: View
+    private lateinit var settingsToggleBadge: TextView
+    private lateinit var settingsAutoRenumberBtn: TextView
+    private lateinit var settingsResetDthBtn: TextView
+    private lateinit var settingsRecyclerView: RecyclerView
+    private lateinit var channelSettingsAdapter: ChannelSettingsAdapter
+
+    private lateinit var editNumberCard: CardView
+    private lateinit var editChannelLogo: ImageView
+    private lateinit var editChannelName: TextView
+    private lateinit var editNumberDisplay: TextView
+    private lateinit var editConflictText: TextView
+    private lateinit var editCancelBtn: TextView
+    private lateinit var editSaveBtn: TextView
+
+    private var editingChannel: Channel? = null
+    private var editBuffer: String = ""
+    private var isFirstDigitAfterOpen = true
 
     private lateinit var channelBannerCard: CardView
     private lateinit var bannerChannelNumber: TextView
@@ -74,10 +96,6 @@ class MainActivity : Activity(), CoroutineScope {
         progressBar.visibility = View.GONE
     }
 
-    // Debounces rapid channel-up/down key repeats so holding the button
-    // doesn't flood the tuner with real tune() calls - only the channel the
-    // user finally settles on gets tuned. Banner/selection still update
-    // instantly on every press so navigation still feels responsive.
     private var pendingZapChannel: Channel? = null
     private val zapHandler = Handler(Looper.getMainLooper())
     private val zapTuneRunnable = Runnable {
@@ -104,31 +122,17 @@ class MainActivity : Activity(), CoroutineScope {
             "android.permission.READ_TV_LISTINGS"
         )
         private const val PERMISSION_REQUEST_CODE = 1010
-        private const val ZAP_DEBOUNCE_MS = 300L
+        private const val ZAP_DEBOUNCE_MS = 120L
 
-        // These are intentionally generous - the guide is designed for
-        // viewers who read and react more slowly, so nothing should vanish
-        // or time out before they've had a real chance to see it.
         private const val SIDEBAR_AUTO_HIDE_MS = 20000L
-        private const val BANNER_AUTO_HIDE_MS = 6000L
+        private const val BANNER_AUTO_HIDE_MS = 5000L
         private const val NUMERIC_ENTRY_TIMEOUT_MS = 3000L
         private const val NUMERIC_ENTRY_MAX_DIGITS = 4
 
-        // How long to wait after a tune (or after a channel that's already
-        // playing starts re-buffering) before showing the loading indicator,
-        // and how long after *that* to give up and show "Channel
-        // Unavailable" if it never resolves. The exact right values here
-        // depend on how long this specific tuner hardware actually takes to
-        // lock a signal in practice - these are reasonable starting points,
-        // not verified against real hardware.
-        private const val TUNING_SHOW_DELAY_MS = 400L
+        private const val TUNING_SHOW_DELAY_MS = 500L
         private const val TUNING_FALLBACK_TIMEOUT_MS = 8000L
         private const val SUSTAINED_BUFFERING_THRESHOLD_MS = 3000L
 
-        // Persists only the last-watched channel. Since the app now fully
-        // exits whenever it's left (see onStop()), this is what makes the
-        // next launch resume where you left off instead of always
-        // restarting on the first channel.
         private const val PREFS_NAME = "vividorbit_prefs"
         private const val PREF_LAST_CHANNEL_ID = "last_channel_id"
     }
@@ -141,26 +145,71 @@ class MainActivity : Activity(), CoroutineScope {
         job = Job()
         setContentView(R.layout.activity_main)
 
-        // Initialize MediaSession to prevent sleep
         mediaSession = MediaSession(this, "VividOrbitLiveTv")
         mediaSession.isActive = true
 
-        // Initialize UI Elements
         tvView = findViewById(R.id.tv_view)
         progressBar = findViewById(R.id.progress_bar)
         channelUnavailableText = findViewById(R.id.channel_unavailable_text)
         sidebarContainer = findViewById(R.id.sidebar_container)
         sidebarHeader = findViewById(R.id.sidebar_header)
+        sidebarSettingsBtn = findViewById(R.id.sidebar_settings_btn)
         channelRecyclerView = findViewById(R.id.channel_recycler_view)
         numericEntryCard = findViewById(R.id.numeric_entry_card)
         numericEntryText = findViewById(R.id.numeric_entry_text)
         noChannelsText = findViewById(R.id.no_channels_text)
+
+        settingsContainer = findViewById(R.id.settings_container)
+        settingsCloseBtn = findViewById(R.id.settings_close_btn)
+        settingsToggleRow = findViewById(R.id.settings_toggle_row)
+        settingsToggleBadge = findViewById(R.id.settings_toggle_badge)
+        settingsAutoRenumberBtn = findViewById(R.id.settings_auto_renumber_btn)
+        settingsResetDthBtn = findViewById(R.id.settings_reset_dth_btn)
+        settingsRecyclerView = findViewById(R.id.settings_recycler_view)
+
+        editNumberCard = findViewById(R.id.edit_number_card)
+        editChannelLogo = findViewById(R.id.edit_channel_logo)
+        editChannelName = findViewById(R.id.edit_channel_name)
+        editNumberDisplay = findViewById(R.id.edit_number_display)
+        editConflictText = findViewById(R.id.edit_conflict_text)
+        editCancelBtn = findViewById(R.id.edit_cancel_btn)
+        editSaveBtn = findViewById(R.id.edit_save_btn)
+
         channelBannerCard = findViewById(R.id.channel_banner_card)
         bannerChannelNumber = findViewById(R.id.banner_channel_number)
         bannerChannelLogo = findViewById(R.id.banner_channel_logo)
         bannerChannelName = findViewById(R.id.banner_channel_name)
 
-        // Initialize helpers
+        repository = ChannelRepository(this)
+
+        sidebarSettingsBtn.setOnClickListener {
+            openSettings()
+        }
+
+        settingsCloseBtn.setOnClickListener {
+            closeSettings()
+        }
+
+        settingsToggleRow.setOnClickListener {
+            toggleCustomNumbers()
+        }
+
+        settingsAutoRenumberBtn.setOnClickListener {
+            autoRenumberLinear()
+        }
+
+        settingsResetDthBtn.setOnClickListener {
+            resetToDth()
+        }
+
+        editCancelBtn.setOnClickListener {
+            closeEditNumberDialog()
+        }
+
+        editSaveBtn.setOnClickListener {
+            saveEditedNumber()
+        }
+
         tvViewHelper = TvViewHelper(
             tvView = tvView,
             onVideoAvailable = {
@@ -174,11 +223,6 @@ class MainActivity : Activity(), CoroutineScope {
                 mediaSession.setPlaybackState(stateBuilder.build())
             },
             onVideoUnavailable = { reason ->
-                // Cancelled unconditionally up front (previously only
-                // showProgressRunnable was cleared here) - otherwise a
-                // second VIDEO_UNAVAILABLE_REASON_TUNING callback in the same
-                // tune sequence could stack a second hideProgressFallback
-                // call on top of the first, hiding the spinner prematurely.
                 progressHandler.removeCallbacks(showProgressRunnable)
                 progressHandler.removeCallbacks(hideProgressFallbackRunnable)
 
@@ -188,23 +232,14 @@ class MainActivity : Activity(), CoroutineScope {
 
                 when {
                     reason == TvInputManager.VIDEO_UNAVAILABLE_REASON_TUNING -> {
-                        // Genuine channel change in progress - show the loading indicator.
                         progressHandler.postDelayed(showProgressRunnable, TUNING_SHOW_DELAY_MS)
                         progressHandler.postDelayed(hideProgressFallbackRunnable, TUNING_FALLBACK_TIMEOUT_MS)
                     }
                     reason == TvInputManager.VIDEO_UNAVAILABLE_REASON_BUFFERING && !tvViewHelper.hasStartedPlayback() -> {
-                        // Still buffering the very first frame after a tune - show the indicator.
                         progressHandler.postDelayed(showProgressRunnable, TUNING_SHOW_DELAY_MS)
                         progressHandler.postDelayed(hideProgressFallbackRunnable, TUNING_FALLBACK_TIMEOUT_MS)
                     }
                     reason == TvInputManager.VIDEO_UNAVAILABLE_REASON_BUFFERING -> {
-                        // Re-buffering on a channel that's already played
-                        // before. A brief blip shouldn't throw a loading
-                        // overlay over an already-playing picture - but a
-                        // genuine, sustained signal loss still needs to be
-                        // visible, not silently invisible forever (this
-                        // previously never showed anything at all once a
-                        // channel had played once, however long the loss).
                         progressHandler.postDelayed(showProgressRunnable, SUSTAINED_BUFFERING_THRESHOLD_MS)
                         progressHandler.postDelayed(
                             hideProgressFallbackRunnable,
@@ -217,29 +252,23 @@ class MainActivity : Activity(), CoroutineScope {
                 }
             },
             onInputError = {
-                // Hard failures previously had no handling at all: a lost
-                // connection to the tuner input service, a tuner-level
-                // error, or a content-rating block would just leave the app
-                // sitting on a frozen frame with zero feedback.
                 val stateBuilder = PlaybackState.Builder()
                     .setState(PlaybackState.STATE_STOPPED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0.0f)
                 mediaSession.setPlaybackState(stateBuilder.build())
                 showChannelUnavailable()
             }
         )
-        repository = ChannelRepository(this)
 
-        // Set up recyclerview layout
-        channelRecyclerView.layoutManager = LinearLayoutManager(this)
+        val channelLayoutManager = LinearLayoutManager(this)
+        channelRecyclerView.layoutManager = channelLayoutManager
         channelRecyclerView.setHasFixedSize(true)
-        // Default add/change animations were the main cause of the guide
-        // "jumping then sliding" when it opens - a changed-item cross-fade
-        // animation was firing at the same moment the list scrolled to the
-        // current channel, with no stable prior layout to animate from.
         channelRecyclerView.itemAnimator = null
-        applyCenteringPadding(channelRecyclerView)
 
-        // Check for TV EPG Provider permissions at runtime
+        val settingsLayoutManager = LinearLayoutManager(this)
+        settingsRecyclerView.layoutManager = settingsLayoutManager
+        settingsRecyclerView.setHasFixedSize(true)
+        settingsRecyclerView.itemAnimator = null
+
         val missing = REQUIRED_PERMISSIONS.filter {
             checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED
         }
@@ -251,7 +280,7 @@ class MainActivity : Activity(), CoroutineScope {
         }
     }
 
-    private fun loadChannelData() {
+    private fun loadChannelData(preserveCurrentChannel: Boolean = false) {
         launch {
             progressBar.visibility = View.VISIBLE
             allChannels = repository.getChannels()
@@ -266,24 +295,29 @@ class MainActivity : Activity(), CoroutineScope {
             )
             channelRecyclerView.adapter = channelAdapter
 
+            channelSettingsAdapter = ChannelSettingsAdapter(
+                channels = allChannels,
+                scope = this@MainActivity,
+                onChannelClick = { channel ->
+                    openEditNumberDialog(channel)
+                }
+            )
+            settingsRecyclerView.adapter = channelSettingsAdapter
+
             progressBar.visibility = View.GONE
             updateSidebarHeader(allChannels.size)
+            updateSettingsToggleUi()
 
-            // Resume on whichever channel was last playing, falling back to
-            // the first available channel if it no longer exists (e.g.
-            // removed by a fresh channel scan).
             if (allChannels.isNotEmpty()) {
-                val lastChannelId = prefs.getLong(PREF_LAST_CHANNEL_ID, -1L)
-                val startChannel = allChannels.find { it.id == lastChannelId } ?: allChannels[0]
+                val activeChannel = selectedChannel
+                val startChannel = if (preserveCurrentChannel && activeChannel != null) {
+                    allChannels.find { it.id == activeChannel.id } ?: allChannels[0]
+                } else {
+                    val lastChannelId = prefs.getLong(PREF_LAST_CHANNEL_ID, -1L)
+                    allChannels.find { it.id == lastChannelId } ?: allChannels[0]
+                }
                 tuneToChannel(startChannel)
-                // Deliberately NOT opening the guide here - the app should
-                // launch straight into live TV with just the channel banner
-                // (which hides itself after BANNER_AUTO_HIDE_MS). The guide
-                // only opens when the user actually asks for it.
             } else {
-                // Nothing to play - show the guide so the "no channels found"
-                // message is visible instead of a blank screen with no
-                // explanation.
                 showSidebar()
             }
         }
@@ -292,6 +326,135 @@ class MainActivity : Activity(), CoroutineScope {
     private fun updateSidebarHeader(count: Int) {
         sidebarHeader.text = getString(R.string.sidebar_header_format, count)
         noChannelsText.visibility = if (count == 0) View.VISIBLE else View.GONE
+    }
+
+    private fun updateSettingsToggleUi() {
+        val enabled = repository.isCustomNumbersEnabled()
+        settingsToggleBadge.text = if (enabled) getString(R.string.toggle_on) else getString(R.string.toggle_off)
+        settingsToggleBadge.isSelected = enabled
+    }
+
+    private fun openSettings() {
+        sidebarContainer.visibility = View.GONE
+        settingsContainer.visibility = View.VISIBLE
+        updateSettingsToggleUi()
+        if (::channelSettingsAdapter.isInitialized) {
+            channelSettingsAdapter.updateChannels(allChannels)
+        }
+        settingsToggleRow.requestFocus()
+        resetSidebarTimer()
+    }
+
+    private fun closeSettings() {
+        settingsContainer.visibility = View.GONE
+        sidebarContainer.visibility = View.VISIBLE
+
+        val activeChannel = selectedChannel
+        val index = if (activeChannel != null) {
+            allChannels.indexOfFirst { it.id == activeChannel.id }
+        } else {
+            -1
+        }
+
+        val lm = channelRecyclerView.layoutManager as? LinearLayoutManager
+        if (index != -1 && lm != null) {
+            lm.scrollToPositionWithOffset(index, 140)
+            channelRecyclerView.post {
+                val holder = channelRecyclerView.findViewHolderForAdapterPosition(index)
+                holder?.itemView?.requestFocus() ?: channelRecyclerView.requestFocus()
+            }
+        } else {
+            channelRecyclerView.requestFocus()
+        }
+        resetSidebarTimer()
+    }
+
+    private fun toggleCustomNumbers() {
+        val newState = !repository.isCustomNumbersEnabled()
+        repository.setCustomNumbersEnabled(newState)
+        updateSettingsToggleUi()
+        loadChannelData(preserveCurrentChannel = true)
+    }
+
+    private fun autoRenumberLinear() {
+        launch {
+            progressBar.visibility = View.VISIBLE
+            repository.autoAssignLinearOrder(allChannels)
+            repository.setCustomNumbersEnabled(true)
+            loadChannelData(preserveCurrentChannel = true)
+        }
+    }
+
+    private fun resetToDth() {
+        launch {
+            progressBar.visibility = View.VISIBLE
+            repository.resetCustomNumbers()
+            loadChannelData(preserveCurrentChannel = true)
+        }
+    }
+
+    private fun openEditNumberDialog(channel: Channel) {
+        editingChannel = channel
+        editBuffer = channel.displayNumber
+        isFirstDigitAfterOpen = true
+        editChannelName.text = channel.displayName
+        editNumberDisplay.text = editBuffer
+
+        val cachedLogo = ChannelLogoLoader.getCached(channel.id)
+        if (cachedLogo != null) {
+            editChannelLogo.setImageBitmap(cachedLogo)
+        } else {
+            editChannelLogo.setImageResource(android.R.drawable.ic_menu_slideshow)
+            launch(Dispatchers.IO) {
+                val bitmap = ChannelLogoLoader.loadAndCache(this@MainActivity, channel.id, channel.logoUri)
+                withContext(Dispatchers.Main) {
+                    if (editingChannel?.id == channel.id && bitmap != null) {
+                        editChannelLogo.setImageBitmap(bitmap)
+                    }
+                }
+            }
+        }
+
+        updateConflictIndicator(editBuffer)
+        editNumberCard.visibility = View.VISIBLE
+        editSaveBtn.requestFocus()
+        resetSidebarTimer()
+    }
+
+    private fun updateConflictIndicator(number: String) {
+        val targetId = editingChannel?.id ?: return
+        val conflictChannel = allChannels.find { it.displayNumber == number && it.id != targetId }
+        if (conflictChannel != null) {
+            editConflictText.text = getString(R.string.conflict_swap_format, number, conflictChannel.displayName)
+            editConflictText.visibility = View.VISIBLE
+        } else {
+            editConflictText.visibility = View.GONE
+        }
+    }
+
+    private fun saveEditedNumber() {
+        val channel = editingChannel ?: return
+        val targetNumber = editBuffer.trim()
+        if (targetNumber.isNotEmpty()) {
+            launch {
+                progressBar.visibility = View.VISIBLE
+                repository.assignChannelNumber(channel.id, targetNumber)
+                repository.setCustomNumbersEnabled(true)
+                closeEditNumberDialog()
+                loadChannelData(preserveCurrentChannel = true)
+            }
+        } else {
+            closeEditNumberDialog()
+        }
+    }
+
+    private fun closeEditNumberDialog() {
+        editNumberCard.visibility = View.GONE
+        editingChannel = null
+        editBuffer = ""
+        isFirstDigitAfterOpen = true
+        settingsRecyclerView.requestFocus()
+        resetSidebarTimer()
     }
 
     private fun showChannelUnavailable() {
@@ -315,9 +478,6 @@ class MainActivity : Activity(), CoroutineScope {
         }
 
         if (tvViewHelper.isTunedTo(channel.id)) {
-            // Already tuned to (or already tuning to) this channel - skip the
-            // redundant real tune, which would otherwise reset audio track
-            // selection and can cause an audible/visible blip for no reason.
             return
         }
 
@@ -336,13 +496,9 @@ class MainActivity : Activity(), CoroutineScope {
             bannerChannelLogo.setImageBitmap(cachedLogo)
         } else {
             bannerChannelLogo.setImageResource(android.R.drawable.ic_menu_slideshow)
-            // Decode off the main thread - ImageView.setImageURI() decodes the
-            // full-resolution image synchronously on whatever thread calls it,
-            // which was stalling the UI on every single channel change.
             launch(Dispatchers.IO) {
                 val bitmap = ChannelLogoLoader.loadAndCache(this@MainActivity, channel.id, channel.logoUri)
                 withContext(Dispatchers.Main) {
-                    // Only apply if the user hasn't already zapped past this channel.
                     if (selectedChannel?.id == channel.id) {
                         if (bitmap != null) {
                             bannerChannelLogo.setImageBitmap(bitmap)
@@ -376,57 +532,23 @@ class MainActivity : Activity(), CoroutineScope {
         }
         val targetChannel = allChannels[nextIndex]
 
-        // Instant feedback on every press: update the selection and banner
-        // right away so navigation still feels responsive.
         pendingZapChannel = targetChannel
         selectedChannel = targetChannel
         showBottomBanner(targetChannel)
 
         if (isRepeat) {
-            // The button is being held down (a genuine key-repeat event, not
-            // a fresh press) - debounce so the flood of repeat events
-            // doesn't queue up a real tune() per event; only the channel the
-            // user finally settles on gets tuned.
             zapHandler.removeCallbacks(zapTuneRunnable)
             zapHandler.postDelayed(zapTuneRunnable, ZAP_DEBOUNCE_MS)
         } else {
-            // A single, deliberate press - tune immediately rather than
-            // waiting out the debounce window for no reason. Cancel any
-            // still-pending debounced tune from a previous held sequence so
-            // it can't fire late and override this one.
             zapHandler.removeCallbacks(zapTuneRunnable)
             tuneToChannel(targetChannel)
         }
     }
 
     private fun isAnyMenuVisible(): Boolean {
-        return sidebarContainer.visibility == View.VISIBLE
-    }
-
-    /**
-     * Gives a RecyclerView generous top/bottom padding (half its own height)
-     * plus clipToPadding = false, so that even the first or last row has
-     * somewhere to scroll to in order to reach the vertical center - without
-     * this, an edge row physically cannot be centered since there's no real
-     * content above/below it to scroll through. Combined with
-     * View.centerInParentOnFocus() on each row, this is what makes the whole
-     * list scroll behind a fixed, centered highlight.
-     *
-     * Deferred until the RecyclerView actually has a real height, since
-     * these panels start as View.GONE and have no layout at all until first
-     * shown.
-     */
-    private fun applyCenteringPadding(recyclerView: RecyclerView) {
-        recyclerView.clipToPadding = false
-        recyclerView.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
-            override fun onGlobalLayout() {
-                val height = recyclerView.height
-                if (height > 0) {
-                    recyclerView.setPadding(recyclerView.paddingLeft, height / 2, recyclerView.paddingRight, height / 2)
-                    recyclerView.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                }
-            }
-        })
+        return sidebarContainer.visibility == View.VISIBLE ||
+                settingsContainer.visibility == View.VISIBLE ||
+                editNumberCard.visibility == View.VISIBLE
     }
 
     private fun tuneToChannelNumber(number: String) {
@@ -445,13 +567,10 @@ class MainActivity : Activity(), CoroutineScope {
     }
 
     private fun showSidebar() {
+        settingsContainer.visibility = View.GONE
+        editNumberCard.visibility = View.GONE
         sidebarContainer.visibility = View.VISIBLE
 
-        // Scroll to the currently playing channel *before* requesting focus -
-        // requesting focus first would grab whatever row happened to already
-        // be laid out (usually wherever the list was last left scrolled to),
-        // and then scrolling away from it left the focus highlight on the
-        // wrong (or an off-screen) row.
         val activeChannel = selectedChannel
         val index = if (activeChannel != null) {
             allChannels.indexOfFirst { it.id == activeChannel.id }
@@ -459,27 +578,12 @@ class MainActivity : Activity(), CoroutineScope {
             -1
         }
 
-        if (index != -1) {
-            channelRecyclerView.scrollToPosition(index)
+        val lm = channelRecyclerView.layoutManager as? LinearLayoutManager
+        if (index != -1 && lm != null) {
+            lm.scrollToPositionWithOffset(index, 140)
             channelRecyclerView.post {
                 val holder = channelRecyclerView.findViewHolderForAdapterPosition(index)
-                if (holder != null) {
-                    // Center instantly rather than waiting for the row's own
-                    // focus-triggered smooth scroll (see
-                    // View.centerInParentOnFocus()) - the guide should
-                    // already look centered the instant it appears, not
-                    // visibly glide into position. Smooth centering still
-                    // applies normally once you're actively browsing.
-                    val itemCenter = holder.itemView.top + holder.itemView.height / 2
-                    val recyclerCenter = channelRecyclerView.height / 2
-                    val delta = itemCenter - recyclerCenter
-                    if (delta != 0) {
-                        channelRecyclerView.scrollBy(0, delta)
-                    }
-                    holder.itemView.requestFocus()
-                } else {
-                    channelRecyclerView.requestFocus()
-                }
+                holder?.itemView?.requestFocus() ?: channelRecyclerView.requestFocus()
             }
         } else {
             channelRecyclerView.requestFocus()
@@ -490,11 +594,83 @@ class MainActivity : Activity(), CoroutineScope {
 
     private fun hideSidebar() {
         sidebarContainer.visibility = View.GONE
+        settingsContainer.visibility = View.GONE
+        editNumberCard.visibility = View.GONE
         sidebarHandler.removeCallbacks(hideSidebarRunnable)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         resetSidebarTimer()
+
+        if (editNumberCard.visibility == View.VISIBLE) {
+            if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
+                val digit = (keyCode - KeyEvent.KEYCODE_0).toString()
+                if (isFirstDigitAfterOpen) {
+                    editBuffer = digit
+                    isFirstDigitAfterOpen = false
+                } else {
+                    if (editBuffer.length < NUMERIC_ENTRY_MAX_DIGITS) {
+                        editBuffer += digit
+                    }
+                }
+                editNumberDisplay.text = editBuffer
+                updateConflictIndicator(editBuffer)
+                return true
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                val cur = editBuffer.toIntOrNull() ?: 0
+                editBuffer = (cur + 1).coerceAtMost(9999).toString()
+                isFirstDigitAfterOpen = false
+                editNumberDisplay.text = editBuffer
+                updateConflictIndicator(editBuffer)
+                return true
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                val cur = editBuffer.toIntOrNull() ?: 1
+                editBuffer = (cur - 1).coerceAtLeast(1).toString()
+                isFirstDigitAfterOpen = false
+                editNumberDisplay.text = editBuffer
+                updateConflictIndicator(editBuffer)
+                return true
+            }
+            if (keyCode == KeyEvent.KEYCODE_DEL) {
+                if (editBuffer.length > 1) {
+                    editBuffer = editBuffer.dropLast(1)
+                } else {
+                    editBuffer = "1"
+                }
+                isFirstDigitAfterOpen = false
+                editNumberDisplay.text = editBuffer
+                updateConflictIndicator(editBuffer)
+                return true
+            }
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                closeEditNumberDialog()
+                return true
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                if (editCancelBtn.isFocused) {
+                    closeEditNumberDialog()
+                } else {
+                    saveEditedNumber()
+                }
+                return true
+            }
+        }
+
+        if (settingsContainer.visibility == View.VISIBLE) {
+            if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                closeSettings()
+                return true
+            }
+        }
+
+        if (sidebarContainer.visibility == View.VISIBLE) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                openSettings()
+                return true
+            }
+        }
 
         if (numericEntryCard.visibility == View.VISIBLE) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
@@ -503,9 +679,6 @@ class MainActivity : Activity(), CoroutineScope {
                 return true
             }
             if (keyCode == KeyEvent.KEYCODE_BACK) {
-                // Previously fell through to the system default, which -
-                // since nothing else claimed it - exited the whole app
-                // instead of just dismissing the number entry.
                 numericHandler.removeCallbacks(tuneRunnable)
                 numericBuffer = ""
                 numericEntryCard.visibility = View.GONE
@@ -535,8 +708,6 @@ class MainActivity : Activity(), CoroutineScope {
             }
         }
 
-        // Intercept Keypad Numbers for Natural entry tuning - only when no
-        // other overlay is open, matching how arrow-key zapping behaves.
         if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
             if (!isAnyMenuVisible()) {
                 if (numericBuffer.length < NUMERIC_ENTRY_MAX_DIGITS) {
@@ -570,6 +741,9 @@ class MainActivity : Activity(), CoroutineScope {
                 showSidebar()
                 return true
             } else if (sidebarContainer.visibility == View.VISIBLE) {
+                openSettings()
+                return true
+            } else if (settingsContainer.visibility == View.VISIBLE) {
                 hideSidebar()
                 return true
             }
@@ -589,16 +763,6 @@ class MainActivity : Activity(), CoroutineScope {
 
     override fun onStop() {
         super.onStop()
-        // The user has left the app entirely - backgrounded it, switched to
-        // another app, or the TV went to sleep. Rather than lingering in the
-        // background holding the tuner, MediaSession, and other resources,
-        // fully exit here. onDestroy() (triggered by finish()) does the
-        // actual teardown; the next launch resumes on the last channel via
-        // the preferences saved in tuneToChannel().
-        //
-        // Guarded against configuration changes (e.g. a locale/density
-        // change) since those already trigger their own destroy+recreate
-        // cycle - we don't want to also treat that as "the user left".
         if (!isChangingConfigurations) {
             finish()
         }
@@ -614,8 +778,6 @@ class MainActivity : Activity(), CoroutineScope {
             if (grantResults.isNotEmpty() && grantResults.all { it == android.content.pm.PackageManager.PERMISSION_GRANTED }) {
                 loadChannelData()
             } else {
-                // Previously failed silently here, leaving a permanently
-                // blank screen with no indication of what went wrong.
                 progressBar.visibility = View.GONE
                 channelUnavailableText.text = getString(R.string.permission_required)
                 channelUnavailableText.visibility = View.VISIBLE
@@ -632,10 +794,6 @@ class MainActivity : Activity(), CoroutineScope {
         numericHandler.removeCallbacksAndMessages(null)
         zapHandler.removeCallbacksAndMessages(null)
         job.cancel()
-        // Order matters here: detach the callback first, then reset. If we
-        // reset() first while still connected, a resulting callback (e.g.
-        // onVideoUnavailable) could fire and try to touch mediaSession
-        // (already released above) or views that are mid-teardown.
         tvViewHelper.cleanup()
         tvViewHelper.reset()
     }

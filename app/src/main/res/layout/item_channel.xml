@@ -1,35 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="78dp"
+    android:layout_height="70dp"
     android:layout_marginTop="2dp"
     android:layout_marginBottom="2dp"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:paddingStart="16dp"
-    android:paddingEnd="16dp"
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp"
     android:focusable="true"
     android:clickable="true"
     android:background="@drawable/item_background_selector">
 
     <TextView
         android:id="@+id/channel_number"
-        android:layout_width="48dp"
-        android:layout_height="36dp"
+        android:layout_width="44dp"
+        android:layout_height="32dp"
         android:gravity="center"
         android:background="@drawable/badge_number_bg"
         android:duplicateParentState="true"
         android:fontFamily="sans-serif-medium"
         android:textColor="@color/badge_number_text_color"
-        android:textSize="16sp"
+        android:textSize="15sp"
         android:text="12" />
 
     <ImageView
         android:id="@+id/channel_logo"
-        android:layout_width="42dp"
-        android:layout_height="42dp"
-        android:layout_marginStart="14dp"
-        android:layout_marginEnd="14dp"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
         android:scaleType="fitCenter"
         android:contentDescription="Channel Logo"
         android:src="@android:drawable/ic_menu_slideshow" />
@@ -41,7 +41,7 @@
         android:layout_weight="1"
         android:fontFamily="sans-serif"
         android:textColor="@color/text_primary"
-        android:textSize="19sp"
+        android:textSize="18sp"
         android:ellipsize="end"
         android:maxLines="1"
         android:text="Channel Name" />

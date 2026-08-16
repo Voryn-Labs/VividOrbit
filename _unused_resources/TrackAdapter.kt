@@ -42,8 +42,6 @@ class TrackAdapter(
                 displayName += "  ·  Current"
             }
             nameText.text = displayName
-            // Selection is shown by the row's own background/outline plus the
-            // "Current" text suffix above - no separate indicator dot.
             itemView.isSelected = isSelected
 
             itemView.setOnClickListener {
