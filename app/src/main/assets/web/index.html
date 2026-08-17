@@ -15,6 +15,7 @@
       --accent: #E5484D;
       --accent-green: #30A46C;
       --accent-blue: #3E63DD;
+      --accent-gold: #FFD700;
       --radius: 10px;
     }
     * {
@@ -162,6 +163,26 @@
       background: var(--accent-blue);
       border-color: #5B7BF0;
     }
+    .filter-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .filter-btn {
+      background: #18181B;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .filter-btn.active {
+      background: #27272A;
+      color: var(--text-primary);
+      border-color: #52525B;
+    }
     .search-box {
       width: 100%;
       background: var(--card-bg);
@@ -245,6 +266,13 @@
       font-size: 12px;
     }
     .icon-btn:active { background: #2F2F35; }
+    .icon-btn.fav {
+      color: var(--text-secondary);
+      font-size: 15px;
+    }
+    .icon-btn.fav.active {
+      color: var(--accent-gold);
+    }
     .icon-btn.tune {
       background: #192B47;
       border-color: #2D4C7C;
@@ -353,7 +381,12 @@
     </div>
   </div>
 
-  <!-- Search -->
+  <!-- Filter & Search Bar -->
+  <div class="filter-bar">
+    <button class="filter-btn active" id="filter-all" onclick="setFilter('all')">All Channels</button>
+    <button class="filter-btn" id="filter-favs" onclick="setFilter('favs')">★ Favorites</button>
+  </div>
+
   <input type="text" class="search-box" id="search-input" placeholder="Search channels by name or number..." oninput="filterChannels()">
 
   <!-- Channel List -->
@@ -388,11 +421,13 @@
 
     let state = {
       channels: [],
+      favoriteIds: [],
       customNumbersEnabled: false,
       startupMode: "last",
       defaultChannelId: -1
     };
 
+    let activeFilter = 'all';
     let editingChannelId = null;
 
     function showToast(msg) {
@@ -428,8 +463,9 @@
       const data = await apiRequest('/api/state');
       if (!data) return;
       state = data;
+      state.favoriteIds = state.favoriteIds || [];
 
-      document.getElementById('channel-count-text').innerText = `${state.channels.length} channels loaded`;
+      document.getElementById('channel-count-text').innerText = `${state.channels.length} channels (${state.favoriteIds.length} ★)`;
       document.getElementById('toggle-custom-numbers').checked = state.customNumbersEnabled;
       document.getElementById('select-startup-mode').value = state.startupMode;
 
@@ -446,19 +482,33 @@
         defSelect.appendChild(opt);
       });
 
-      renderChannels(state.channels);
+      filterChannels();
       showToast("Lineup synced with TV");
+    }
+
+    function setFilter(filter) {
+      activeFilter = filter;
+      document.getElementById('filter-all').className = filter === 'all' ? 'filter-btn active' : 'filter-btn';
+      document.getElementById('filter-favs').className = filter === 'favs' ? 'filter-btn active' : 'filter-btn';
+      filterChannels();
     }
 
     function renderChannels(list) {
       const container = document.getElementById('channel-container');
       container.innerHTML = '';
 
+      if (list.length === 0) {
+        container.innerHTML = `<div style="text-align:center; padding: 32px; color: var(--text-secondary); font-size: 14px;">No channels found.</div>`;
+        return;
+      }
+
       list.forEach((ch, idx) => {
+        const isFav = state.favoriteIds.includes(ch.id);
         const card = document.createElement('div');
         card.className = 'channel-card';
         card.innerHTML = `
           <div class="channel-info">
+            <button class="icon-btn fav ${isFav ? 'active' : ''}" title="${isFav ? 'Unfavorite' : 'Favorite'}" onclick="toggleFavorite(${ch.id})">${isFav ? '★' : '☆'}</button>
             <div class="channel-num-badge" onclick="openEditModal(${ch.id})">${ch.displayNumber}</div>
             <div class="channel-text">
               <div class="channel-name">${ch.name}</div>
@@ -478,16 +528,35 @@
 
     function filterChannels() {
       const q = document.getElementById('search-input').value.toLowerCase().trim();
-      if (!q) {
-        renderChannels(state.channels);
-        return;
+      let list = state.channels;
+
+      if (activeFilter === 'favs') {
+        list = list.filter(ch => state.favoriteIds.includes(ch.id));
       }
-      const filtered = state.channels.filter(ch => 
-        ch.name.toLowerCase().includes(q) || 
-        ch.displayNumber.includes(q) || 
-        ch.originalNumber.includes(q)
-      );
-      renderChannels(filtered);
+
+      if (q) {
+        list = list.filter(ch => 
+          ch.name.toLowerCase().includes(q) || 
+          ch.displayNumber.includes(q) || 
+          ch.originalNumber.includes(q)
+        );
+      }
+      renderChannels(list);
+    }
+
+    async function toggleFavorite(channelId) {
+      const res = await apiRequest('/api/favorite', 'POST', { channelId });
+      if (res && res.success) {
+        if (res.isFavorite) {
+          if (!state.favoriteIds.includes(channelId)) state.favoriteIds.push(channelId);
+          showToast("Added to Favorites ★");
+        } else {
+          state.favoriteIds = state.favoriteIds.filter(id => id !== channelId);
+          showToast("Removed from Favorites");
+        }
+        document.getElementById('channel-count-text').innerText = `${state.channels.length} channels (${state.favoriteIds.length} ★)`;
+        filterChannels();
+      }
     }
 
     async function moveChannel(index, delta) {
@@ -498,7 +567,7 @@
       state.channels.splice(targetIndex, 0, item);
 
       const orderedIds = state.channels.map(c => c.id);
-      renderChannels(state.channels);
+      filterChannels();
 
       const res = await apiRequest('/api/reorder', 'POST', { orderedChannelIds: orderedIds });
       if (res && res.success) {
@@ -513,7 +582,7 @@
       state.channels.unshift(item);
 
       const orderedIds = state.channels.map(c => c.id);
-      renderChannels(state.channels);
+      filterChannels();
 
       const res = await apiRequest('/api/reorder', 'POST', { orderedChannelIds: orderedIds });
       if (res && res.success) {

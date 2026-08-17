@@ -140,6 +140,7 @@ class LocalConfigServer(
                 method == "GET" && path == "/api/state" -> handleGetState(output)
                 method == "POST" && path == "/api/number" -> handlePostNumber(output, body)
                 method == "POST" && path == "/api/reorder" -> handlePostReorder(output, body)
+                method == "POST" && path == "/api/favorite" -> handlePostFavorite(output, body)
                 method == "POST" && path == "/api/config" -> handlePostConfig(output, body)
                 method == "POST" && path == "/api/tune" -> handlePostTune(output, body)
                 method == "GET" && path == "/api/export" -> handleGetExport(output)
@@ -191,6 +192,7 @@ class LocalConfigServer(
     private fun handleGetState(output: OutputStream) {
         serverScope.launch {
             val channels = repository.getChannels()
+            val favorites = repository.getFavoriteIds()
             val json = JSONObject()
             val array = JSONArray()
             for (ch in channels) {
@@ -199,6 +201,7 @@ class LocalConfigServer(
                 item.put("displayNumber", ch.displayNumber)
                 item.put("originalNumber", ch.originalDisplayNumber)
                 item.put("name", ch.displayName)
+                item.put("isFavorite", favorites.contains(ch.id))
                 array.put(item)
             }
             json.put("channels", array)
@@ -206,9 +209,30 @@ class LocalConfigServer(
             json.put("startupMode", repository.getStartupMode().key)
             json.put("defaultChannelId", repository.getDefaultChannelId())
 
+            val favArray = JSONArray()
+            favorites.forEach { favArray.put(it) }
+            json.put("favoriteIds", favArray)
+
             withContext(Dispatchers.IO) {
                 sendJsonResponse(output, 200, json)
             }
+        }
+    }
+
+    private fun handlePostFavorite(output: OutputStream, body: String) {
+        try {
+            val req = JSONObject(body)
+            val channelId = req.getLong("channelId")
+            val isNowFav = repository.toggleFavorite(channelId)
+            onDataChanged()
+
+            val resp = JSONObject()
+            resp.put("success", true)
+            resp.put("channelId", channelId)
+            resp.put("isFavorite", isNowFav)
+            sendJsonResponse(output, 200, resp)
+        } catch (e: Exception) {
+            sendJsonResponse(output, 400, JSONObject().put("error", e.message ?: "Invalid JSON"))
         }
     }
 

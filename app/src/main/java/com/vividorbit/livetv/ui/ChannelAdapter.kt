@@ -21,12 +21,14 @@ class ChannelAdapter(
     private val scope: CoroutineScope,
     private var currentChannelId: Long? = null,
     private val epgRepository: EpgRepository? = null,
+    private var isFavoriteChecker: ((Long) -> Boolean)? = null,
     private val onChannelClick: (Channel) -> Unit,
     private val onChannelLongClick: ((Channel) -> Boolean)? = null
 ) : RecyclerView.Adapter<ChannelAdapter.ViewHolder>() {
 
     companion object {
         const val PAYLOAD_SELECTION = "payload_selection"
+        const val PAYLOAD_FAVORITE = "payload_favorite"
     }
 
     private var updateJob: Job? = null
@@ -42,12 +44,19 @@ class ChannelAdapter(
             holder.setSelection(channel.id == currentChannelId)
             return
         }
+        if (payloads.contains(PAYLOAD_FAVORITE)) {
+            val channel = channels[position]
+            val isFav = isFavoriteChecker?.invoke(channel.id) == true
+            holder.setFavorite(isFav)
+            return
+        }
         super.onBindViewHolder(holder, position, payloads)
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val channel = channels[position]
-        holder.bind(channel, channel.id == currentChannelId, onChannelClick, onChannelLongClick)
+        val isFav = isFavoriteChecker?.invoke(channel.id) == true
+        holder.bind(channel, channel.id == currentChannelId, isFav, onChannelClick, onChannelLongClick)
     }
 
     override fun getItemCount(): Int = channels.size
@@ -60,6 +69,13 @@ class ChannelAdapter(
             if (channel.id == oldId || channel.id == channelId) {
                 notifyItemChanged(index, PAYLOAD_SELECTION)
             }
+        }
+    }
+
+    fun notifyFavoriteChanged(channelId: Long) {
+        val index = channels.indexOfFirst { it.id == channelId }
+        if (index != -1) {
+            notifyItemChanged(index, PAYLOAD_FAVORITE)
         }
     }
 
@@ -84,6 +100,7 @@ class ChannelAdapter(
         private val logoImage: ImageView = itemView.findViewById(R.id.channel_logo)
         private val nameText: TextView = itemView.findViewById(R.id.channel_name)
         private val programText: TextView = itemView.findViewById(R.id.channel_program)
+        private val favoriteStar: TextView = itemView.findViewById(R.id.item_favorite_star)
         private var imageJob: Job? = null
         private var epgJob: Job? = null
 
@@ -95,15 +112,21 @@ class ChannelAdapter(
             itemView.isSelected = isSelected
         }
 
+        fun setFavorite(isFavorite: Boolean) {
+            favoriteStar.visibility = if (isFavorite) View.VISIBLE else View.GONE
+        }
+
         fun bind(
             channel: Channel,
             isCurrentlyPlaying: Boolean,
+            isFavorite: Boolean,
             onClick: (Channel) -> Unit,
             onLongClick: ((Channel) -> Boolean)?
         ) {
             numberText.text = channel.displayNumber
             nameText.text = channel.displayName
             itemView.isSelected = isCurrentlyPlaying
+            favoriteStar.visibility = if (isFavorite) View.VISIBLE else View.GONE
 
             itemView.contentDescription = itemView.context.getString(
                 R.string.accessibility_channel_format,

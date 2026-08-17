@@ -10,6 +10,7 @@ import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 
 enum class StartupMode(val key: String) {
@@ -36,6 +37,8 @@ class ChannelRepository(private val context: Context) {
         private const val PREF_STARTUP_MODE = "startup_mode"
         private const val PREF_DEFAULT_CHANNEL_ID = "default_channel_id"
         private const val PREF_LAST_CHANNEL_ID = "last_channel_id"
+        private const val PREF_PREVIOUS_CHANNEL_ID = "previous_channel_id"
+        private const val PREF_FAVORITES_JSON = "favorites_channel_ids_json"
     }
 
     private val prefs: SharedPreferences by lazy {
@@ -81,6 +84,57 @@ class ChannelRepository(private val context: Context) {
     @Synchronized
     fun setLastChannelId(id: Long) {
         prefs.edit().putLong(PREF_LAST_CHANNEL_ID, id).apply()
+    }
+
+    @Synchronized
+    fun getPreviousChannelId(): Long {
+        return prefs.getLong(PREF_PREVIOUS_CHANNEL_ID, -1L)
+    }
+
+    @Synchronized
+    fun setPreviousChannelId(id: Long) {
+        prefs.edit().putLong(PREF_PREVIOUS_CHANNEL_ID, id).apply()
+    }
+
+    @Synchronized
+    fun getFavoriteIds(): Set<Long> {
+        val jsonStr = prefs.getString(PREF_FAVORITES_JSON, null) ?: return emptySet()
+        val result = mutableSetOf<Long>()
+        try {
+            val array = JSONArray(jsonStr)
+            for (i in 0 until array.length()) {
+                result.add(array.getLong(i))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing favorites JSON: ${e.message}", e)
+        }
+        return result
+    }
+
+    @Synchronized
+    fun setFavoriteIds(ids: Set<Long>) {
+        val array = JSONArray()
+        ids.forEach { array.put(it) }
+        prefs.edit().putString(PREF_FAVORITES_JSON, array.toString()).apply()
+    }
+
+    @Synchronized
+    fun isFavorite(channelId: Long): Boolean {
+        return getFavoriteIds().contains(channelId)
+    }
+
+    @Synchronized
+    fun toggleFavorite(channelId: Long): Boolean {
+        val favs = getFavoriteIds().toMutableSet()
+        val isNowFav = if (favs.contains(channelId)) {
+            favs.remove(channelId)
+            false
+        } else {
+            favs.add(channelId)
+            true
+        }
+        setFavoriteIds(favs)
+        return isNowFav
     }
 
     fun resolveStartupChannel(

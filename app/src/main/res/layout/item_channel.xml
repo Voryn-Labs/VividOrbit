@@ -70,4 +70,17 @@
             android:text="Now Playing" />
     </LinearLayout>
 
+    <TextView
+        android:id="@+id/item_favorite_star"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:fontFamily="sans-serif"
+        android:textColor="#FFD700"
+        android:textSize="16sp"
+        android:importantForAccessibility="no"
+        android:visibility="gone"
+        android:text="★" />
+
 </LinearLayout>

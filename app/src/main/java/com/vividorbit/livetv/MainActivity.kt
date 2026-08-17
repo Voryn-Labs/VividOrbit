@@ -56,6 +56,8 @@ class MainActivity : Activity(), CoroutineScope {
     private lateinit var sidebarContainer: View
     private lateinit var sidebarHeader: TextView
     private lateinit var sidebarSettingsBtn: TextView
+    private lateinit var sidebarTabAll: TextView
+    private lateinit var sidebarTabFavs: TextView
     private lateinit var channelRecyclerView: RecyclerView
     private lateinit var numericEntryCard: CardView
     private lateinit var numericEntryText: TextView
@@ -155,6 +157,8 @@ class MainActivity : Activity(), CoroutineScope {
 
     private var allChannels: List<Channel> = emptyList()
     private var selectedChannel: Channel? = null
+    private var previousChannelId: Long? = null
+    private var isFavoritesFilterActive = false
 
     private var numericBuffer = ""
     private val numericHandler = Handler(Looper.getMainLooper())
@@ -198,6 +202,8 @@ class MainActivity : Activity(), CoroutineScope {
         sidebarContainer = findViewById(R.id.sidebar_container)
         sidebarHeader = findViewById(R.id.sidebar_header)
         sidebarSettingsBtn = findViewById(R.id.sidebar_settings_btn)
+        sidebarTabAll = findViewById(R.id.sidebar_tab_all)
+        sidebarTabFavs = findViewById(R.id.sidebar_tab_favs)
         channelRecyclerView = findViewById(R.id.channel_recycler_view)
         numericEntryCard = findViewById(R.id.numeric_entry_card)
         numericEntryText = findViewById(R.id.numeric_entry_text)
@@ -254,6 +260,7 @@ class MainActivity : Activity(), CoroutineScope {
 
         repository = ChannelRepository(this)
         epgRepository = EpgRepository(this)
+        previousChannelId = repository.getPreviousChannelId().takeIf { it != -1L }
 
         sidebarSettingsBtn.setOnClickListener {
             openSettings()
@@ -261,6 +268,14 @@ class MainActivity : Activity(), CoroutineScope {
 
         settingsCloseBtn.setOnClickListener {
             closeSettings()
+        }
+
+        sidebarTabAll.setOnClickListener {
+            setFavoritesFilter(false)
+        }
+
+        sidebarTabFavs.setOnClickListener {
+            setFavoritesFilter(true)
         }
 
         settingsToggleRow.setOnClickListener {
@@ -386,15 +401,19 @@ class MainActivity : Activity(), CoroutineScope {
             channels = emptyList(),
             scope = this,
             epgRepository = epgRepository,
+            isFavoriteChecker = { id -> repository.isFavorite(id) },
             onChannelClick = { channel ->
                 tuneToChannel(channel)
                 hideSidebar()
             },
             onChannelLongClick = { channel ->
-                repository.setStartupMode(StartupMode.FIXED_DEFAULT)
-                repository.setDefaultChannelId(channel.id)
-                Toast.makeText(this, getString(R.string.default_channel_set_toast, channel.displayName), Toast.LENGTH_SHORT).show()
-                updateSettingsToggleUi()
+                val isNowFav = repository.toggleFavorite(channel.id)
+                channelAdapter.notifyFavoriteChanged(channel.id)
+                val msg = if (isNowFav) "Added to Favorites ★" else "Removed from Favorites"
+                Toast.makeText(this, "${channel.displayName}: $msg", Toast.LENGTH_SHORT).show()
+                if (isFavoritesFilterActive) {
+                    refreshDisplayedChannels()
+                }
                 true
             }
         )
@@ -443,17 +462,34 @@ class MainActivity : Activity(), CoroutineScope {
         }
     }
 
+    private fun setFavoritesFilter(enabled: Boolean) {
+        isFavoritesFilterActive = enabled
+        sidebarTabAll.isSelected = !enabled
+        sidebarTabFavs.isSelected = enabled
+        refreshDisplayedChannels()
+        resetSidebarTimer()
+    }
+
+    private fun refreshDisplayedChannels() {
+        val displayed = if (isFavoritesFilterActive) {
+            allChannels.filter { repository.isFavorite(it.id) }
+        } else {
+            allChannels
+        }
+        channelAdapter.updateChannels(displayed)
+        updateSidebarHeader(displayed.size)
+    }
+
     private fun loadChannelData(preserveCurrentChannel: Boolean = false) {
         launch {
             progressBar.visibility = View.VISIBLE
             allChannels = repository.getChannels()
 
-            channelAdapter.updateChannels(allChannels)
+            refreshDisplayedChannels()
             channelSettingsAdapter.updateChannels(allChannels)
             startupPickerAdapter.updateChannels(allChannels)
 
             progressBar.visibility = View.GONE
-            updateSidebarHeader(allChannels.size)
             updateSettingsToggleUi()
 
             if (allChannels.isNotEmpty()) {
@@ -468,7 +504,8 @@ class MainActivity : Activity(), CoroutineScope {
     }
 
     private fun updateSidebarHeader(count: Int) {
-        sidebarHeader.text = getString(R.string.sidebar_header_format, count)
+        val title = if (isFavoritesFilterActive) "Favorites · $count" else "Channels · $count"
+        sidebarHeader.text = title
         noChannelsText.visibility = if (count == 0) View.VISIBLE else View.GONE
     }
 
@@ -508,8 +545,9 @@ class MainActivity : Activity(), CoroutineScope {
         sidebarContainer.visibility = View.VISIBLE
 
         val activeChannel = selectedChannel
+        val currentList = if (isFavoritesFilterActive) allChannels.filter { repository.isFavorite(it.id) } else allChannels
         val index = if (activeChannel != null) {
-            allChannels.indexOfFirst { it.id == activeChannel.id }
+            currentList.indexOfFirst { it.id == activeChannel.id }
         } else {
             -1
         }
@@ -714,6 +752,12 @@ class MainActivity : Activity(), CoroutineScope {
     }
 
     private fun tuneToChannel(channel: Channel) {
+        val current = selectedChannel
+        if (current != null && current.id != channel.id) {
+            previousChannelId = current.id
+            repository.setPreviousChannelId(current.id)
+        }
+
         pendingZapChannel = null
         selectedChannel = channel
         repository.setLastChannelId(channel.id)
@@ -730,6 +774,17 @@ class MainActivity : Activity(), CoroutineScope {
         progressHandler.removeCallbacks(hideProgressFallbackRunnable)
         progressHandler.postDelayed(showProgressRunnable, TUNING_SHOW_DELAY_MS)
         tvViewHelper.tune(channel.inputId, channel.id, TvContract.buildChannelUri(channel.id))
+    }
+
+    private fun recallPreviousChannel() {
+        val prevId = previousChannelId ?: repository.getPreviousChannelId().takeIf { it != -1L }
+        if (prevId != null && prevId != -1L) {
+            val target = allChannels.find { it.id == prevId }
+            if (target != null) {
+                tuneToChannel(target)
+                Toast.makeText(this, "Quick Recall: ${target.displayName}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun showBottomBanner(channel: Channel) {
@@ -787,20 +842,21 @@ class MainActivity : Activity(), CoroutineScope {
     }
 
     private fun navigateChannel(direction: Int, isRepeat: Boolean) {
-        if (allChannels.isEmpty()) return
+        val currentList = if (isFavoritesFilterActive) allChannels.filter { repository.isFavorite(it.id) } else allChannels
+        if (currentList.isEmpty()) return
 
         val current = pendingZapChannel ?: selectedChannel
         var nextIndex = 0
         if (current != null) {
-            val currentIndex = allChannels.indexOfFirst { it.id == current.id }
+            val currentIndex = currentList.indexOfFirst { it.id == current.id }
             if (currentIndex != -1) {
-                nextIndex = (currentIndex + direction) % allChannels.size
+                nextIndex = (currentIndex + direction) % currentList.size
                 if (nextIndex < 0) {
-                    nextIndex += allChannels.size
+                    nextIndex += currentList.size
                 }
             }
         }
-        val targetChannel = allChannels[nextIndex]
+        val targetChannel = currentList[nextIndex]
 
         pendingZapChannel = targetChannel
         selectedChannel = targetChannel
@@ -859,8 +915,9 @@ class MainActivity : Activity(), CoroutineScope {
         sidebarContainer.visibility = View.VISIBLE
 
         val activeChannel = selectedChannel
+        val currentList = if (isFavoritesFilterActive) allChannels.filter { repository.isFavorite(it.id) } else allChannels
         val index = if (activeChannel != null) {
-            allChannels.indexOfFirst { it.id == activeChannel.id }
+            currentList.indexOfFirst { it.id == activeChannel.id }
         } else {
             -1
         }
@@ -893,8 +950,20 @@ class MainActivity : Activity(), CoroutineScope {
         sidebarHandler.removeCallbacks(hideSidebarRunnable)
     }
 
+    override fun onKeyLongPress(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && !isAnyMenuVisible()) {
+            recallPreviousChannel()
+            return true
+        }
+        return super.onKeyLongPress(keyCode, event)
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         resetSidebarTimer()
+
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            event.startTracking()
+        }
 
         if (::confirmActionCard.isInitialized && confirmActionCard.visibility == View.VISIBLE) {
             if (keyCode == KeyEvent.KEYCODE_BACK) {
@@ -1008,6 +1077,24 @@ class MainActivity : Activity(), CoroutineScope {
                 numericEntryCard.visibility = View.GONE
                 return true
             }
+        }
+
+        // Quick Recall Keys
+        if (keyCode == KeyEvent.KEYCODE_LAST_CHANNEL || keyCode == KeyEvent.KEYCODE_MEDIA_PREVIOUS) {
+            recallPreviousChannel()
+            return true
+        }
+
+        // Favorite Toggle Keys (Yellow or Blue TV remote buttons)
+        if (keyCode == KeyEvent.KEYCODE_PROG_YELLOW || keyCode == KeyEvent.KEYCODE_PROG_BLUE) {
+            selectedChannel?.let { ch ->
+                val isNowFav = repository.toggleFavorite(ch.id)
+                channelAdapter.notifyFavoriteChanged(ch.id)
+                val msg = if (isNowFav) "Added to Favorites ★" else "Removed from Favorites"
+                Toast.makeText(this, "${ch.displayName}: $msg", Toast.LENGTH_SHORT).show()
+                if (isFavoritesFilterActive) refreshDisplayedChannels()
+            }
+            return true
         }
 
         if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP) {
