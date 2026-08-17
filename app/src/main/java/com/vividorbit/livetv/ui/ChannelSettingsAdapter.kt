@@ -5,6 +5,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.vividorbit.livetv.R
 import com.vividorbit.livetv.data.Channel
@@ -15,10 +16,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class ChannelSettingsAdapter(
-    private var channels: List<Channel>,
+    private var channels: List<Channel> = emptyList(),
     private val scope: CoroutineScope,
     private val onChannelClick: (Channel) -> Unit
 ) : RecyclerView.Adapter<ChannelSettingsAdapter.ViewHolder>() {
+
+    private var updateJob: Job? = null
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_channel_settings, parent, false)
@@ -33,8 +36,15 @@ class ChannelSettingsAdapter(
     override fun getItemCount(): Int = channels.size
 
     fun updateChannels(newChannels: List<Channel>) {
-        channels = newChannels
-        notifyDataSetChanged()
+        val oldChannels = channels
+        updateJob?.cancel()
+        updateJob = scope.launch(Dispatchers.Default) {
+            val diffResult = DiffUtil.calculateDiff(channelDiff(oldChannels, newChannels))
+            withContext(Dispatchers.Main) {
+                channels = newChannels
+                diffResult.dispatchUpdatesTo(this@ChannelSettingsAdapter)
+            }
+        }
     }
 
     class ViewHolder(itemView: View, private val scope: CoroutineScope) : RecyclerView.ViewHolder(itemView) {
@@ -42,6 +52,7 @@ class ChannelSettingsAdapter(
         private val logoImage: ImageView = itemView.findViewById(R.id.settings_channel_logo)
         private val nameText: TextView = itemView.findViewById(R.id.settings_channel_name)
         private val dthNumberText: TextView = itemView.findViewById(R.id.settings_dth_number)
+        private val editBadge: TextView = itemView.findViewById(R.id.settings_edit_badge)
         private var imageJob: Job? = null
 
         init {

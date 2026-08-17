@@ -16,17 +16,30 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class ChannelAdapter(
-    private var channels: List<Channel>,
+    private var channels: List<Channel> = emptyList(),
     private val scope: CoroutineScope,
     private var currentChannelId: Long? = null,
     private val onChannelClick: (Channel) -> Unit
 ) : RecyclerView.Adapter<ChannelAdapter.ViewHolder>() {
+
+    companion object {
+        const val PAYLOAD_SELECTION = "payload_selection"
+    }
 
     private var updateJob: Job? = null
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_channel, parent, false)
         return ViewHolder(view, scope)
+    }
+
+    override fun onBindViewHolder(holder: ViewHolder, position: Int, payloads: MutableList<Any>) {
+        if (payloads.contains(PAYLOAD_SELECTION)) {
+            val channel = channels[position]
+            holder.setSelection(channel.id == currentChannelId)
+            return
+        }
+        super.onBindViewHolder(holder, position, payloads)
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
@@ -42,27 +55,16 @@ class ChannelAdapter(
         currentChannelId = channelId
         channels.forEachIndexed { index, channel ->
             if (channel.id == oldId || channel.id == channelId) {
-                notifyItemChanged(index)
+                notifyItemChanged(index, PAYLOAD_SELECTION)
             }
         }
     }
 
     fun updateChannels(newChannels: List<Channel>) {
         val oldChannels = channels
-
         updateJob?.cancel()
         updateJob = scope.launch(Dispatchers.Default) {
-            val diffCallback = object : DiffUtil.Callback() {
-                override fun getOldListSize(): Int = oldChannels.size
-                override fun getNewListSize(): Int = newChannels.size
-                override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                    return oldChannels[oldItemPosition].id == newChannels[newItemPosition].id
-                }
-                override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                    return oldChannels[oldItemPosition] == newChannels[newItemPosition]
-                }
-            }
-            val diffResult = DiffUtil.calculateDiff(diffCallback)
+            val diffResult = DiffUtil.calculateDiff(channelDiff(oldChannels, newChannels))
             withContext(Dispatchers.Main) {
                 channels = newChannels
                 diffResult.dispatchUpdatesTo(this@ChannelAdapter)
@@ -78,6 +80,10 @@ class ChannelAdapter(
 
         init {
             itemView.centerInParentOnFocus()
+        }
+
+        fun setSelection(isSelected: Boolean) {
+            itemView.isSelected = isSelected
         }
 
         fun bind(channel: Channel, isCurrentlyPlaying: Boolean, onClick: (Channel) -> Unit) {

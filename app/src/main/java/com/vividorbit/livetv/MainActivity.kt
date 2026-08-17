@@ -1,6 +1,8 @@
 package com.vividorbit.livetv
 
 import android.app.Activity
+import android.content.ComponentCallbacks2
+import android.content.pm.PackageManager
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.media.tv.TvContract
@@ -79,7 +81,9 @@ class MainActivity : Activity(), CoroutineScope {
 
     private val bannerHandler = Handler(Looper.getMainLooper())
     private val hideBannerRunnable = Runnable {
-        channelBannerCard.visibility = View.GONE
+        if (::channelBannerCard.isInitialized) {
+            channelBannerCard.visibility = View.GONE
+        }
     }
 
     private lateinit var mediaSession: MediaSession
@@ -90,10 +94,14 @@ class MainActivity : Activity(), CoroutineScope {
 
     private val progressHandler = Handler(Looper.getMainLooper())
     private val showProgressRunnable = Runnable {
-        progressBar.visibility = View.VISIBLE
+        if (::progressBar.isInitialized) {
+            progressBar.visibility = View.VISIBLE
+        }
     }
     private val hideProgressFallbackRunnable = Runnable {
-        progressBar.visibility = View.GONE
+        if (::progressBar.isInitialized) {
+            progressBar.visibility = View.GONE
+        }
     }
 
     private var pendingZapChannel: Channel? = null
@@ -112,15 +120,15 @@ class MainActivity : Activity(), CoroutineScope {
     private val tuneRunnable = Runnable {
         val numberToTune = numericBuffer
         numericBuffer = ""
-        numericEntryCard.visibility = View.GONE
+        if (::numericEntryCard.isInitialized) {
+            numericEntryCard.visibility = View.GONE
+        }
         tuneToChannelNumber(numberToTune)
     }
 
     companion object {
-        private val REQUIRED_PERMISSIONS = arrayOf(
-            "com.android.providers.tv.permission.READ_EPG_DATA",
-            "android.permission.READ_TV_LISTINGS"
-        )
+        private const val PRIMARY_PERMISSION = "android.permission.READ_TV_LISTINGS"
+        private const val OPTIONAL_EPG_PERMISSION = "com.android.providers.tv.permission.READ_EPG_DATA"
         private const val PERMISSION_REQUEST_CODE = 1010
         private const val ZAP_DEBOUNCE_MS = 120L
 
@@ -259,22 +267,33 @@ class MainActivity : Activity(), CoroutineScope {
             }
         )
 
-        val channelLayoutManager = LinearLayoutManager(this)
-        channelRecyclerView.layoutManager = channelLayoutManager
+        channelAdapter = ChannelAdapter(
+            channels = emptyList(),
+            scope = this,
+            onChannelClick = { channel ->
+                tuneToChannel(channel)
+                hideSidebar()
+            }
+        )
+        channelRecyclerView.layoutManager = LinearLayoutManager(this)
         channelRecyclerView.setHasFixedSize(true)
         channelRecyclerView.itemAnimator = null
+        channelRecyclerView.adapter = channelAdapter
 
-        val settingsLayoutManager = LinearLayoutManager(this)
-        settingsRecyclerView.layoutManager = settingsLayoutManager
+        channelSettingsAdapter = ChannelSettingsAdapter(
+            channels = emptyList(),
+            scope = this,
+            onChannelClick = { channel ->
+                openEditNumberDialog(channel)
+            }
+        )
+        settingsRecyclerView.layoutManager = LinearLayoutManager(this)
         settingsRecyclerView.setHasFixedSize(true)
         settingsRecyclerView.itemAnimator = null
+        settingsRecyclerView.adapter = channelSettingsAdapter
 
-        val missing = REQUIRED_PERMISSIONS.filter {
-            checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED
-        }
-
-        if (missing.isNotEmpty()) {
-            requestPermissions(missing.toTypedArray(), PERMISSION_REQUEST_CODE)
+        if (checkSelfPermission(PRIMARY_PERMISSION) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(PRIMARY_PERMISSION, OPTIONAL_EPG_PERMISSION), PERMISSION_REQUEST_CODE)
         } else {
             loadChannelData()
         }
@@ -285,24 +304,8 @@ class MainActivity : Activity(), CoroutineScope {
             progressBar.visibility = View.VISIBLE
             allChannels = repository.getChannels()
 
-            channelAdapter = ChannelAdapter(
-                channels = allChannels,
-                scope = this@MainActivity,
-                onChannelClick = { channel ->
-                    tuneToChannel(channel)
-                    hideSidebar()
-                }
-            )
-            channelRecyclerView.adapter = channelAdapter
-
-            channelSettingsAdapter = ChannelSettingsAdapter(
-                channels = allChannels,
-                scope = this@MainActivity,
-                onChannelClick = { channel ->
-                    openEditNumberDialog(channel)
-                }
-            )
-            settingsRecyclerView.adapter = channelSettingsAdapter
+            channelAdapter.updateChannels(allChannels)
+            channelSettingsAdapter.updateChannels(allChannels)
 
             progressBar.visibility = View.GONE
             updateSidebarHeader(allChannels.size)
@@ -338,9 +341,7 @@ class MainActivity : Activity(), CoroutineScope {
         sidebarContainer.visibility = View.GONE
         settingsContainer.visibility = View.VISIBLE
         updateSettingsToggleUi()
-        if (::channelSettingsAdapter.isInitialized) {
-            channelSettingsAdapter.updateChannels(allChannels)
-        }
+        channelSettingsAdapter.updateChannels(allChannels)
         settingsToggleRow.requestFocus()
         resetSidebarTimer()
     }
@@ -473,9 +474,7 @@ class MainActivity : Activity(), CoroutineScope {
         showBottomBanner(channel)
         channelUnavailableText.visibility = View.GONE
 
-        if (::channelAdapter.isInitialized) {
-            channelAdapter.setCurrentChannel(channel.id)
-        }
+        channelAdapter.setCurrentChannel(channel.id)
 
         if (tvViewHelper.isTunedTo(channel.id)) {
             return
@@ -546,16 +545,27 @@ class MainActivity : Activity(), CoroutineScope {
     }
 
     private fun isAnyMenuVisible(): Boolean {
-        return sidebarContainer.visibility == View.VISIBLE ||
-                settingsContainer.visibility == View.VISIBLE ||
-                editNumberCard.visibility == View.VISIBLE
+        return (::sidebarContainer.isInitialized && sidebarContainer.visibility == View.VISIBLE) ||
+                (::settingsContainer.isInitialized && settingsContainer.visibility == View.VISIBLE) ||
+                (::editNumberCard.isInitialized && editNumberCard.visibility == View.VISIBLE)
     }
 
     private fun tuneToChannelNumber(number: String) {
-        val parsedTarget = number.toIntOrNull() ?: return
-        val channel = allChannels.find { it.displayNumber.toIntOrNull() == parsedTarget }
-        if (channel != null) {
-            tuneToChannel(channel)
+        val trimmed = number.trim()
+        if (trimmed.isEmpty()) return
+
+        val exactMatch = allChannels.find { it.displayNumber.equals(trimmed, ignoreCase = true) }
+        if (exactMatch != null) {
+            tuneToChannel(exactMatch)
+            return
+        }
+
+        val parsedTarget = trimmed.toIntOrNull()
+        if (parsedTarget != null) {
+            val numericMatch = allChannels.find { it.displayNumber.toIntOrNull() == parsedTarget }
+            if (numericMatch != null) {
+                tuneToChannel(numericMatch)
+            }
         }
     }
 
@@ -593,16 +603,16 @@ class MainActivity : Activity(), CoroutineScope {
     }
 
     private fun hideSidebar() {
-        sidebarContainer.visibility = View.GONE
-        settingsContainer.visibility = View.GONE
-        editNumberCard.visibility = View.GONE
+        if (::sidebarContainer.isInitialized) sidebarContainer.visibility = View.GONE
+        if (::settingsContainer.isInitialized) settingsContainer.visibility = View.GONE
+        if (::editNumberCard.isInitialized) editNumberCard.visibility = View.GONE
         sidebarHandler.removeCallbacks(hideSidebarRunnable)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         resetSidebarTimer()
 
-        if (editNumberCard.visibility == View.VISIBLE) {
+        if (::editNumberCard.isInitialized && editNumberCard.visibility == View.VISIBLE) {
             if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
                 val digit = (keyCode - KeyEvent.KEYCODE_0).toString()
                 if (isFirstDigitAfterOpen) {
@@ -658,21 +668,21 @@ class MainActivity : Activity(), CoroutineScope {
             }
         }
 
-        if (settingsContainer.visibility == View.VISIBLE) {
+        if (::settingsContainer.isInitialized && settingsContainer.visibility == View.VISIBLE) {
             if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                 closeSettings()
                 return true
             }
         }
 
-        if (sidebarContainer.visibility == View.VISIBLE) {
+        if (::sidebarContainer.isInitialized && sidebarContainer.visibility == View.VISIBLE) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
                 openSettings()
                 return true
             }
         }
 
-        if (numericEntryCard.visibility == View.VISIBLE) {
+        if (::numericEntryCard.isInitialized && numericEntryCard.visibility == View.VISIBLE) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
                 numericHandler.removeCallbacks(tuneRunnable)
                 tuneRunnable.run()
@@ -723,7 +733,7 @@ class MainActivity : Activity(), CoroutineScope {
         }
 
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (sidebarContainer.visibility == View.VISIBLE) {
+            if (::sidebarContainer.isInitialized && sidebarContainer.visibility == View.VISIBLE) {
                 hideSidebar()
                 return true
             }
@@ -740,10 +750,10 @@ class MainActivity : Activity(), CoroutineScope {
             if (!isAnyMenuVisible()) {
                 showSidebar()
                 return true
-            } else if (sidebarContainer.visibility == View.VISIBLE) {
+            } else if (::sidebarContainer.isInitialized && sidebarContainer.visibility == View.VISIBLE) {
                 openSettings()
                 return true
-            } else if (settingsContainer.visibility == View.VISIBLE) {
+            } else if (::settingsContainer.isInitialized && settingsContainer.visibility == View.VISIBLE) {
                 hideSidebar()
                 return true
             }
@@ -757,8 +767,11 @@ class MainActivity : Activity(), CoroutineScope {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
-    override fun onPause() {
-        super.onPause()
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            ChannelLogoLoader.evictAll()
+        }
     }
 
     override fun onStop() {
@@ -775,26 +788,37 @@ class MainActivity : Activity(), CoroutineScope {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERMISSION_REQUEST_CODE) {
-            if (grantResults.isNotEmpty() && grantResults.all { it == android.content.pm.PackageManager.PERMISSION_GRANTED }) {
+            val listingsIndex = permissions.indexOf(PRIMARY_PERMISSION)
+            val isListingsGranted = listingsIndex != -1 &&
+                    grantResults.size > listingsIndex &&
+                    grantResults[listingsIndex] == PackageManager.PERMISSION_GRANTED
+
+            if (isListingsGranted) {
                 loadChannelData()
             } else {
-                progressBar.visibility = View.GONE
-                channelUnavailableText.text = getString(R.string.permission_required)
-                channelUnavailableText.visibility = View.VISIBLE
+                if (::progressBar.isInitialized) progressBar.visibility = View.GONE
+                if (::channelUnavailableText.isInitialized) {
+                    channelUnavailableText.text = getString(R.string.permission_required)
+                    channelUnavailableText.visibility = View.VISIBLE
+                }
             }
         }
     }
 
     override fun onDestroy() {
-        super.onDestroy()
-        mediaSession.release()
+        if (::mediaSession.isInitialized) {
+            mediaSession.release()
+        }
         sidebarHandler.removeCallbacksAndMessages(null)
         bannerHandler.removeCallbacksAndMessages(null)
         progressHandler.removeCallbacksAndMessages(null)
         numericHandler.removeCallbacksAndMessages(null)
         zapHandler.removeCallbacksAndMessages(null)
         job.cancel()
-        tvViewHelper.cleanup()
-        tvViewHelper.reset()
+        if (::tvViewHelper.isInitialized) {
+            tvViewHelper.cleanup()
+            tvViewHelper.reset()
+        }
+        super.onDestroy()
     }
 }

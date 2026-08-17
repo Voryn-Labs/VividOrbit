@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.LruCache
+import java.util.Collections
 
 object ChannelLogoLoader {
 
@@ -13,11 +14,19 @@ object ChannelLogoLoader {
     private val cache = object : LruCache<Long, Bitmap>(cacheSizeKb) {
         override fun sizeOf(key: Long, bitmap: Bitmap): Int = bitmap.byteCount / 1024
     }
+    private val misses = Collections.synchronizedSet(mutableSetOf<Long>())
 
     fun getCached(channelId: Long): Bitmap? = cache.get(channelId)
 
-    fun loadAndCache(context: Context, channelId: Long, logoUri: Uri, reqSize: Int = 100): Bitmap? {
+    fun evictAll() {
+        cache.evictAll()
+        misses.clear()
+    }
+
+    fun loadAndCache(context: Context, channelId: Long, logoUri: Uri, reqSize: Int = 200): Bitmap? {
         cache.get(channelId)?.let { return it }
+        if (misses.contains(channelId)) return null
+
         return try {
             var inSampleSize = 1
             context.contentResolver.openInputStream(logoUri)?.use { input ->
@@ -34,7 +43,7 @@ object ChannelLogoLoader {
                 }
             }
 
-            context.contentResolver.openInputStream(logoUri)?.use { input ->
+            val decodedBitmap = context.contentResolver.openInputStream(logoUri)?.use { input ->
                 val options = BitmapFactory.Options().apply {
                     this.inSampleSize = inSampleSize
                     inPreferredConfig = Bitmap.Config.RGB_565
@@ -43,7 +52,13 @@ object ChannelLogoLoader {
                     cache.put(channelId, bitmap)
                 }
             }
+
+            if (decodedBitmap == null) {
+                misses.add(channelId)
+            }
+            decodedBitmap
         } catch (e: Exception) {
+            misses.add(channelId)
             null
         }
     }
