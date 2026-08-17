@@ -1,291 +1,202 @@
-# VividOrbit Live TV
+# 🪐 VividOrbit — Premium Live TV & Lineup Manager for Android TV
 
-[![Android SDK](https://img.shields.io/badge/Android%20SDK-28%2B-brightgreen.svg)](https://developer.android.com)
-[![Target SDK](https://img.shields.io/badge/Target%20SDK-34-blue.svg)](https://developer.android.com)
-[![Language](https://img.shields.io/badge/Language-Kotlin-orange.svg)](https://kotlinlang.org/)
-[![Platform](https://img.shields.io/badge/Platform-Android%20TV%20%2F%20Leanback-red.svg)](https://developer.android.com/tv)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+<p align="center">
+  <img src="app/src/main/res/drawable/banner.png" alt="VividOrbit Banner" width="600" style="border-radius: 12px;"/>
+</p>
 
-**VividOrbit** is a high-performance, television-native Live TV client engineered specifically for Android TV, set-top boxes (STBs), and smart TVs. Built on top of Android's native `TvView` framework and `TvContract` Content Provider, VividOrbit provides low-latency hardware tuning, intelligent audio recovery, custom linear channel reordering with duplicate conflict resolution, and a streamlined Leanback interface optimized for remote control navigation.
+<p align="center">
+  <b>A lightweight, blazing-fast, 100% offline Live TV experience for Android TV & Google TV devices.</b><br>
+  Features custom channel numbering with atomic collision resolution, embedded phone-based lineup management over QR code, now/next EPG integration, and instant channel recall.
+</p>
 
----
-
-## 📑 Table of Contents
-
-- [Core Features](#-core-features)
-- [Custom Channel Numbers & Lineup Management](#-custom-channel-numbers--lineup-management)
-- [How It Works: Step-by-Step System Flow](#-how-it-works-step-by-step-system-flow)
-  - [1. App Startup & Hardware Initialization](#1-app-startup--hardware-initialization)
-  - [2. Channel Discovery & Smart Sorting](#2-channel-discovery--smart-sorting)
-  - [3. Direct Playback & State Restoration](#3-direct-playback--state-restoration)
-  - [4. Proactive Audio Recovery Watchdog](#4-proactive-audio-recovery-watchdog)
-  - [5. Remote Navigation & Debounced Zapping](#5-remote-navigation--debounced-zapping)
-  - [6. Direct Numeric Keypad Tuning](#6-direct-numeric-keypad-tuning)
-  - [7. Channel Guide & Center-Locked Navigation](#7-channel-guide--center-locked-navigation)
-  - [8. Channel Settings & Lineup Manager](#8-channel-settings--lineup-manager)
-  - [9. Asynchronous Logo Pipeline & Caching](#9-asynchronous-logo-pipeline--caching)
-  - [10. Lifecycle Teardown & Resource Release](#10-lifecycle-teardown--resource-release)
-- [Architecture & Component Breakdown](#-architecture--component-breakdown)
-- [Remote Control & Keypad Mapping](#-remote-control--keypad-mapping)
-- [Design System & UI Specs](#-design-system--ui-specs)
-- [Setup & Build Instructions](#-setup--build-instructions)
-- [Hardware & Permissions Configuration](#-hardware--permissions-configuration)
-- [License](#-license)
+<p align="center">
+  <img src="https://img.shields.io/badge/Platform-Android%20TV%20%7C%20Google%20TV-blue?logo=android" alt="Platform"/>
+  <img src="https://img.shields.io/badge/Min%20SDK-28%20(Android%209)-success" alt="Min SDK"/>
+  <img src="https://img.shields.io/badge/Target%20SDK-34%20(Android%2014)-green" alt="Target SDK"/>
+  <img src="https://img.shields.io/badge/Kotlin-1.9.0-purple?logo=kotlin" alt="Kotlin"/>
+  <img src="https://img.shields.io/badge/Cloud%20Dependency-Zero%20(100%25%20Offline)-brightgreen" alt="Offline First"/>
+  <img src="https://img.shields.io/badge/License-Proprietary-red" alt="License"/>
+</p>
 
 ---
 
-## 🌟 Core Features
+## ✨ Key Features
 
-- 📺 **Native TvView Playback**: Zero-overhead video rendering utilizing Android's `android.media.tv.TvView` with hardware decoder acceleration.
-- 🔢 **Custom Linear Channel Numbers**: User-assigned custom channel numbering and linear sequencing with an in-app toggle to switch between custom and DTH broadcast numbers.
-- 🔄 **Atomic Duplicate Swap**: Intelligent number assignment that automatically swaps numbers if an assignment conflicts with an existing channel, guaranteeing complete lineup uniqueness.
-- ⚡ **Auto-Renumber 1..N**: One-touch sequential renumbering to convert arbitrary DTH channel numbers into clean, contiguous linear ordering.
-- 🛡️ **Automated Audio Watchdog**: Background watchdog that verifies stream track validity every 4 seconds, recovering from silent renegotiations or audio drops common in DTV tuner HALs.
-- 🎮 **Debounced Remote Zapping**: Instant UI feedback on channel buttons with 300ms tuning debounce on held keys, preventing hardware tuner saturation during rapid scrolling.
-- 🎯 **Center-Locked Focus Scrolling**: Custom `RecyclerViewFocusCentering` keeping the active channel highlight locked to the vertical center of the guide.
-- 🖼️ **High-Performance Async Logo Cache**: Background content provider decoding with downsampling and LRU memory caching to eliminate UI thread hitching.
-- 📻 **MediaSession State Sync**: Integrated `MediaSession` playback states to prevent TV sleep during playback and maintain system media compliance.
+### 📺 1. High-Performance TV Playback Engine
+* **Universal Tuner Discovery**: Auto-detects all available hardware tuners via Android's `TvInputManager` (DVB-T/T2, DVB-S/S2, DVB-C, ATSC, and OEM inputs).
+* **Hardware-Accelerated Full Bleed**: 100% full-screen video rendering via `TvView` with zero letterboxing.
+* **Smart Zapping Buffer**: 120ms debounce on channel flips prevents tuner thrashing while delivering instantaneous audio/video playback.
+* **Memory-Optimized Image Pipeline**: Multi-level LRU logo cache with negative caching and uniform 200px decoding to prevent memory spikes on low-RAM Set-Top Boxes.
 
----
+### 🔢 2. Custom Channel Numbering & Atomic Swapping
+* **Linear Numbering**: Reorder channels consecutively (1, 2, 3...) regardless of awkward broadcaster LCNs.
+* **Atomic Conflict Resolution**: Assigning an existing number to a channel automatically swaps numbers with the conflicting channel, preventing duplicate or missing entries.
+* **One-Touch Auto-Renumber**: Renumber your entire lineup from `1..N` with a single click.
+* **Broadcaster Fallback**: Toggle back to original DTH numbers at any time without losing your custom map.
 
-## ⚙️ Custom Channel Numbers & Lineup Management
+### 📱 3. Phone Configuration over QR Code (Local Web UI)
+* **Zero Cloud / 100% Offline**: Embedded multi-threaded HTTP server runs locally on the TV (port `8080`).
+* **Cryptographic Token Auth**: Dynamic 32-character session token verified with constant-time comparison prevents unauthorized LAN writes.
+* **Offline Detection**: Graceful UI detection when TV has no network connection with a one-click Retry option.
+* **Rich Mobile Web App (`assets/web/index.html`)**:
+  * Real-time search and filter by name or number.
+  * Move Up, Down, and "Move to Top" controls.
+  * Inline number editing with conflict swap.
+  * **Phone as Remote**: Tap "📺 Tune" next to any channel to switch the TV live.
+  * **Lineup Backup & Restore**: Export and import full channel lineups as JSON files keyed by channel name.
+  * **Live Synchronization**: Edits made on your phone reflect on the TV screen in under 500ms via non-blocking `DiffUtil`.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Channels · 142               [ ⚙ Settings ] ◄── (Guide Header)
-├─────────────────────────────────────────────────────────────┤
-│ [1]  BBC News                                               │
-│ [2]  CNN International                                      │
-│ [3]  Discovery Channel                                      │
-└─────────────────────────────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│  CHANNEL SETTINGS & LINEUP                      [ Close ]   │
-├─────────────────────────────────────────────────────────────┤
-│  [ Custom Channel Numbers ]                     [ ON | OFF ]│
-│  Order channels linearly with custom assigned numbers       │
-│                                                             │
-│  [ Auto-Renumber 1..N ]          [ Reset to DTH ]           │
-├─────────────────────────────────────────────────────────────┤
-│  [#1]  BBC News            DTH: 102           [ Edit ]      │
-│  [#2]  CNN International   DTH: 105           [ Edit ]      │
-│  [#3]  Discovery Channel   DTH: 210           [ Edit ]      │
-└─────────────────────────────────────────────────────────────┘
-```
+### 📅 4. Now / Next EPG with Adaptive Fallback
+* **Asynchronous EPG Fetcher**: Queries `TvContract.Programs` on background coroutines with an in-memory 60-second TTL cache.
+* **Broadcast Progress Bar**: Shows current program title, formatted time window (*"9:00 PM – 9:30 PM"*), live percentage bar, and upcoming *"Next: ..."* show.
+* **Bulletproof No-Data Collapse**: If the tuner source provides no EPG data, the banner collapses cleanly into a single-row channel badge with zero layout shifts or empty boxes.
 
-1. **Preference Toggle**: Located inside the dedicated Channel Settings menu. Turning the toggle `OFF` immediately reverts to original broadcaster DTH numbers without losing custom assignments.
-2. **Assigning Numbers**: Select any channel in the Lineup Editor to open the **Assign Channel Number** dialog. Type the desired number using remote keys `0`–`9`.
-3. **No Duplicate Numbers (Atomic Swap)**: If number `5` is already assigned to Channel A, assigning `5` to Channel B will automatically give Channel A Channel B's previous number.
-4. **Auto-Renumbering**: Pressing `[ Auto-Renumber 1..N ]` automatically numbers all available channels consecutively from 1 to N in linear sequence.
+### ⭐ 5. Favorites System & Quick Last-Channel Recall
+* **Instant Recall**: Long-pressing `BACK` (or pressing remote `KEYCODE_LAST_CHANNEL`) while watching TV immediately jumps back to the previously tuned channel.
+* **Favorites Filtering**: Filter the guide sidebar between **[ All Channels ]** and **[ ★ Favorites ]**.
+* **Remote Shortcuts**: Dedicated yellow/blue TV remote keys toggle favorite status on the fly.
+* **Live Web Sync**: Star/unstar channels from your phone browser with instant TV updates.
 
----
+### 🚀 6. Startup Channel Resolution Matrix
+* **Configurable Startup**: Choose between `Last Watched`, `Fixed Default Channel` (e.g. *Zee TV HD*), or `First in List`.
+* **Indestructible Fallback Chain**: `LAST_WATCHED` $\rightarrow$ `FIXED_DEFAULT` $\rightarrow$ `FIRST_CHANNEL` guarantees the app never launches onto a blank screen after tuner rescans.
+* **Quick-Set Long-Press**: Long-press `DPAD_CENTER` on any channel in the guide or settings to set it as your default startup channel.
 
-## 🔄 How It Works: Step-by-Step System Flow
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant TV as Android System / Remote
-    participant Main as MainActivity
-    participant Repo as ChannelRepository
-    participant Helper as TvViewHelper
-    participant Tuner as TvView / DTV Input
-
-    TV->>Main: Launch App (onCreate)
-    Main->>Main: Init MediaSession & Layout
-    Main->>Repo: getChannels() [IO Dispatcher]
-    Repo->>Repo: Query TvContract (DtvkitTvInput)
-    Repo->>Repo: Check Custom Numbers Pref & Sort
-    Repo-->>Main: Return Channel List
-    Main->>Main: Restore Last Channel (Prefs)
-    Main->>Helper: tune(inputId, channelUri)
-    Helper->>Tuner: tvView.tune(...)
-    Tuner-->>Helper: onVideoAvailable()
-    Helper->>Main: Dismiss Loading Spinner
-    Helper->>Helper: Start Audio Watchdog Loop (every 4s)
-    Main->>TV: Render Video & Channel Banner (6s Auto-Hide)
-```
-
-### 1. App Startup & Hardware Initialization
-1. `MainActivity.onCreate()` sets the window flag `FLAG_KEEP_SCREEN_ON` to prevent display dimming.
-2. Initializes an active `android.media.session.MediaSession` (`"VividOrbitLiveTv"`) to signal active media consumption to the OS.
-3. Sets up view hierarchies: `TvView`, loading `ProgressBar`, status messages, channel guide sidebar, settings overlay panel, numeric keypad card, and bottom banner overlay.
-4. Checks runtime permissions for `READ_EPG_DATA` and `READ_TV_LISTINGS`.
-
-### 2. Channel Discovery & Smart Sorting
-1. `ChannelRepository.getChannels()` runs on `Dispatchers.IO`.
-2. Queries the content provider via `TvContract.buildChannelsUriForInput()` targeted to the hardware tuner input (`com.droidlogic.dtvkit.inputsource/.DtvkitTvInput/HW19`).
-3. Checks `isCustomNumbersEnabled()`:
-   - **When ON**: Loads custom numbers JSON mapping, applies custom numbers to channels, and sorts in ascending linear numerical order (1, 2, 3...).
-   - **When OFF**: Retains original broadcast LCNs (`originalDisplayNumber`) and sorts in standard DTH order.
-
-### 3. Direct Playback & State Restoration
-1. `MainActivity.loadChannelData()` checks `SharedPreferences` (`PREF_LAST_CHANNEL_ID`) to locate the last-viewed channel.
-2. Automatically tunes to that channel (or the first channel on first launch).
-3. Opens straight into full-screen video with the bottom channel banner visible for 6 seconds (`BANNER_AUTO_HIDE_MS`).
-
-### 4. Proactive Audio Recovery Watchdog
-1. `TvViewHelper` runs a background watchdog runnable every 4,000 ms (`AUDIO_WATCHDOG_INTERVAL_MS`).
-2. Queries `tvView.getTracks(TvTrackInfo.TYPE_AUDIO)` and verifies if the currently selected track ID is present in the active list.
-3. If no valid track is selected, it immediately re-selects the preferred or default audio track automatically.
-
-### 5. Remote Navigation & Debounced Zapping
-1. Pressing `CHANNEL_UP`, `CHANNEL_DOWN`, `DPAD_UP`, or `DPAD_DOWN` updates the selection and banner immediately.
-2. **Single Press**: Issues a `tune()` immediately.
-3. **Button Held Down**: Debounces tuning with a 300 ms delay (`ZAP_DEBOUNCE_MS`), tuning only the channel settled on when the button is released.
-
-### 6. Direct Numeric Keypad Tuning
-1. Pressing numeric keys (`0`–`9`) on a TV remote displays the floating numeric entry card in the top-right corner.
-2. Matches against active `displayNumber` (custom or DTH depending on toggle state).
-3. A 3-second auto-commit timer (`NUMERIC_ENTRY_TIMEOUT_MS`) counts down on every digit entered, or commits immediately on `DPAD_CENTER` / `ENTER`.
-
-### 7. Channel Guide & Center-Locked Navigation
-1. Pressing `MENU` or `GUIDE` toggles the channel guide sidebar.
-2. Auto-scrolls to the currently playing channel.
-3. `RecyclerViewFocusCentering` keeps the highlighted row locked to the vertical center during scrolling.
-
-### 8. Channel Settings & Lineup Manager
-1. Clicking `[ ⚙ Settings ]` in the guide header opens the Settings overlay.
-2. Allows toggling custom numbers, running one-touch linear renumbering, or editing individual channel numbers with live conflict preview.
-
-### 9. Asynchronous Logo Pipeline & Caching
-1. `ChannelLogoLoader` maintains an in-memory `LruCache<Long, Bitmap>` allocating 1/8th of the app's maximum runtime memory.
-2. Bitmaps are decoded off the main thread with downsampling to target dimensions (~100px) and `Bitmap.Config.RGB_565` format.
-
-### 10. Lifecycle Teardown & Resource Release
-1. `onStop()`: Completes (`finish()`) when leaving the app to release tuner hardware.
-2. `onDestroy()`: Releases `MediaSession`, cancels handlers and coroutines, unregisters `TvView` callbacks, and resets `TvView`.
+### 🛡️ 7. TV Standards & Accessibility Compliance
+* **Leanback Overscan Margins**: 48dp horizontal and 27dp vertical safe-area margins applied to all overlay cards and sidebars.
+* **TalkBack Single-Node Accessibility**: Screen readers announce a natural phrase (*"Channel 1, Zee TV HD, now playing Kumkum Bhagya"*).
+* **Destructive Action Confirmations**: Confirmation modal protects against accidental `Auto-Renumber` or `Reset to DTH` clicks.
 
 ---
 
-## 🏗️ Architecture & Component Breakdown
+## 🏗️ Project Architecture & Structure
 
 ```
 VividOrbit/
 ├── app/
-│   ├── src/main/
-│   │   ├── java/com/vividorbit/livetv/
-│   │   │   ├── MainActivity.kt               # Central coordinator: lifecycle, UI overlays, remote key dispatcher
-│   │   │   ├── data/
-│   │   │   │   ├── Channel.kt                # Model for channel identity, DTH number, custom number, and logo URI
-│   │   │   │   └── ChannelRepository.kt      # ContentResolver queries, custom number JSON persistence, uniqueness swap
-│   │   │   ├── player/
-│   │   │   │   └── TvViewHelper.kt           # TvView callback orchestration and automated audio track watchdog
-│   │   │   └── ui/
-│   │   │       ├── ChannelAdapter.kt         # Leanback TV channel list adapter with DiffUtil and playback indicators
-│   │   │       ├── ChannelSettingsAdapter.kt # Settings lineup adapter for editing channel numbers
-│   │   │       ├── ChannelLogoLoader.kt      # Memory-cached LRU bitmap loader with background downsampled decoding
-│   │   │       └── RecyclerViewFocusCentering.kt  # View extension keeping focused items centered in the RecyclerView
-│   │   └── res/
-│   │       ├── layout/
-│   │       │   ├── activity_main.xml         # ConstraintLayout hosting TvView, sidebar, settings, banner, and modals
-│   │       │   ├── item_channel.xml          # TV guide row item layout
-│   │       │   └── item_channel_settings.xml # Settings lineup row layout with DTH and custom number badges
-│   │       ├── drawable/                     # TV focus states, button selectors, and backgrounds
-│   │       └── values/                       # Colors, styles, and string resources
-│   └── libs/
-│       └── mochitif-release.aar              # Dtvkit / Droidlogic hardware tuner integration archive
+│   ├── build.gradle                            # Dependencies, build types, R8 & test options
+│   ├── proguard-rules.pro                      # ProGuard/R8 rules for Android TV & ZXing
+│   └── src/
+│       ├── main/
+│       │   ├── AndroidManifest.xml             # TV intent filters, banner, permissions
+│       │   ├── assets/
+│       │   │   └── web/
+│       │   │       └── index.html              # Mobile Web App for Phone Setup (CSS/JS embedded)
+│       │   ├── java/com/vividorbit/livetv/
+│       │   │   ├── MainActivity.kt             # TV UI Controller, D-pad dispatch, state engine
+│       │   │   ├── data/
+│       │   │   │   ├── Channel.kt              # Immutable channel entity
+│       │   │   │   ├── ChannelRepository.kt    # SharedPreferences persistence, tuner query, favorites
+│       │   │   │   ├── EpgRepository.kt        # Async EPG loader with 60s memory cache
+│       │   │   │   └── Program.kt              # EPG program model & progress calculations
+│       │   │   ├── player/
+│       │   │   │   └── TvViewHelper.kt         # TvView lifecycle wrapper & track management
+│       │   │   ├── server/
+│       │   │   │   ├── LocalConfigServer.kt    # Multi-threaded HTTP server with token auth
+│       │   │   │   ├── NetworkUtils.kt         # LAN IP resolution on wlan0 / eth0
+│       │   │   │   └── QrCodeGenerator.kt      # ZXing QR Bitmap renderer
+│       │   │   └── ui/
+│       │   │       ├── ChannelAdapter.kt       # Fast guide list adapter with DiffUtil
+│       │   │       ├── ChannelDiff.kt          # Off-thread DiffUtil calculation
+│       │   │       ├── ChannelLogoLoader.kt    # Multi-level LRU bitmap cache
+│       │   │       ├── ChannelSettingsAdapter.kt # Channel renumbering settings list adapter
+│       │   │       └── RecyclerViewFocusCentering.kt # TV D-pad focus centering helpers
+│       │   └── res/
+│       │       ├── drawable/                   # Background selectors, focus states, badge frames
+│       │       │   ├── banner.png              # Android TV launcher banner
+│       │       │   ├── logo.png                # App icon
+│       │       │   └── ...
+│       │       ├── layout/
+│       │       │   ├── activity_main.xml       # Main TV layout, overlay sidebars, dialog cards
+│       │       │   ├── item_channel.xml        # TV Guide row with logo, name, EPG, star
+│       │       │   └── item_channel_settings.xml # Settings row with edit badge
+│       │       └── values/
+│       │           ├── colors.xml              # Dark TV theme palette
+│       │           ├── strings.xml             # Extracted string resources
+│       │           └── styles.xml              # Leanback dark theme definitions
+│       └── test/java/com/vividorbit/livetv/
+│           ├── FavoritesAndRecallTest.kt       # Unit tests for favorites & recall history
+│           ├── ProgramTest.kt                  # Unit tests for EPG formatting & progress math
+│           ├── StartupResolutionTest.kt        # Unit tests for startup fallback matrix
+│           └── TokenValidationTest.kt          # Unit tests for constant-time token auth
+├── gradle/                                     # Gradle wrapper
+├── build.gradle                                # Root build configuration
+└── PLAN.md                                     # Full release roadmap & engineering plan
 ```
 
 ---
 
-## 🎮 Remote Control & Keypad Mapping
+## 🎮 TV Remote Control Mapping
 
-| Remote Button / Keycode | Context | Action Performed |
+| Remote Button / Key | Context | Action |
 | :--- | :--- | :--- |
-| **DPAD UP / DOWN** | Full Screen | Switch to previous / next channel |
-| **DPAD UP / DOWN** | Sidebar Guide / Settings | Navigate up / down through list |
-| **CHANNEL UP / DOWN** | Any | Next / previous channel with 300ms hold debounce |
-| **DPAD CENTER / ENTER** | Full Screen | Display bottom channel information banner |
-| **DPAD CENTER / ENTER** | Sidebar Guide | Tune to selected channel and close sidebar |
-| **DPAD CENTER / ENTER** | Settings Lineup | Open number editor for selected channel |
-| **Numeric Keys (0–9)** | Full Screen | Open numeric entry card and buffer digits |
-| **Numeric Keys (0–9)** | Number Editor Modal | Type new custom channel number |
-| **MENU / GUIDE** | Any | Toggle channel guide sidebar open / closed |
-| **BACK** | Number Editor Modal | Cancel number edit and close modal |
-| **BACK** | Settings Menu | Close Settings menu and return to Guide |
-| **BACK** | Sidebar Guide | Close sidebar guide |
-| **BACK** | Full Screen | System back / Exit app |
+| `DPAD_UP` / `DPAD_DOWN` | Video Playback | Quick channel zapping (debounced) |
+| `CHANNEL_UP` / `CHANNEL_DOWN` | Video Playback | Previous / Next channel |
+| `0` – `9` (Numeric Keys) | Video Playback | Direct channel number entry (up to 4 digits) |
+| `DPAD_CENTER` / `ENTER` | Video Playback | Toggle bottom Info Banner (EPG + Channel Info) |
+| `GUIDE` / `MENU` | Video Playback | Open Guide Sidebar |
+| `DPAD_LEFT` | Guide Sidebar | Open Channel Settings Menu |
+| `DPAD_RIGHT` | Settings Menu | Return to Guide Sidebar |
+| `BACK` | Guide / Menus | Close sidebar/modal and return to video |
+| **`BACK` (Long Press)** | Fullscreen Video | **Quick Recall: Jump back to previous channel** |
+| `LAST_CHANNEL` / `PREV` | Fullscreen Video | **Quick Recall: Jump back to previous channel** |
+| **`PROG_YELLOW` / `BLUE`** | Video / Guide | **Toggle Favorite (★) on active channel** |
+| `DPAD_CENTER` (Long Press) | Guide / Settings | **Set selected channel as Default Startup channel** |
 
 ---
 
-## 🎨 Design System & UI Specs
+## 🌐 Phone Setup & REST API Reference
 
-VividOrbit utilizes a television-grade dark aesthetic designed for high contrast and legible reading from across the room:
+When the user opens **📱 Phone Setup**, the TV displays a QR code containing `http://<TV_IP>:8080/?t=<SESSION_TOKEN>`. The local server supports the following endpoints:
 
-- **Monochrome Base**:
-  - Main Background: `#0B0B0C` (`@color/bg_dark`)
-  - Sidebar / Settings Panel: `#161618` (`@color/panel_bg`)
-  - Elevated Cards (Banner, Modals): `#1D1D20` (`@color/panel_bg_elevated`)
-  - Hairline Separators: `#29292C` (`@color/hairline`)
-- **Typography & Hierarchy**:
-  - Primary Text: `#F2F2F3` (`@color/text_primary`)
-  - Secondary Text: `#8A8A8E` (`@color/text_secondary`)
-  - Channel Numbers: Large, light font (`sans-serif-light`)
-  - Channel Titles: Medium weight (`sans-serif-medium`)
-- **Focus & Selection**:
-  - Selected Row: Tinted background `#1B1B1E` with hairline border
-  - Focused Control / Row: High-contrast `#26262A` with 2dp solid `#F2F2F3` border outline
-- **Accent Indicators**:
-  - Live Broadcast: Red accent `#E5484D` (`@color/live_red`)
-  - Toggle ON State: Green accent `#30A46C` (`@color/toggle_on_green`)
+| Method | Endpoint | Description | Payload Example |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/` or `/index.html` | Serves the responsive mobile web application. | None |
+| `GET` | `/api/state` | Returns all channels, favorites, startup mode, and custom numbering state. | None |
+| `POST` | `/api/number` | Reassigns a channel number (with atomic swap on conflict). | `{"channelId": 101, "number": "5"}` |
+| `POST` | `/api/reorder` | Sets custom linear ordering for a list of channel IDs. | `{"orderedChannelIds": [101, 102, 103]}` |
+| `POST` | `/api/favorite` | Toggles favorite status for a channel. | `{"channelId": 101}` |
+| `POST` | `/api/config` | Updates startup mode, custom number toggle, or default channel. | `{"startupMode": "fixed", "defaultChannelId": 101}` |
+| `POST` | `/api/tune` | Tunes the TV directly to the specified channel. | `{"channelId": 101}` |
+| `GET` | `/api/export` | Exports the full channel lineup as a portable JSON backup. | None |
+| `POST` | `/api/import` | Restores channel lineup from a JSON backup (matches by name). | `[{"name": "Zee TV HD", "customNumber": "1"}]` |
 
 ---
 
-## 🛠️ Setup & Build Instructions
+## 🛠️ Build & Verification
 
 ### Prerequisites
-- **Android Studio** Hedgehog (2023.1.1) or newer
-- **JDK 17** (configured in Gradle and IDE settings)
-- **Android TV Device or Emulator** running Android 9.0 (API 28) or higher
-- Hardware or software TV Input Service supporting `TvContract` (e.g. Dtvkit or TIF emulation)
+* **Android SDK**: API 34 (Android 14)
+* **JDK**: Version 17
+* **Gradle**: 8.7+
 
-### Build via Command Line
-
+### Run Automated Tests
 ```bash
-# Clone the repository
-git clone https://github.com/tinyredphoenix/VividOrbit.git
-cd VividOrbit
+./gradlew test
+```
 
-# Build Debug APK
+### Build Debug APK
+```bash
 ./gradlew assembleDebug
-
-# Build Release APK
-./gradlew assembleRelease
+# Output: app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The compiled APK will be located in `app/build/outputs/apk/debug/app-debug.apk`.
-
-### Installing to Android TV via ADB
-
+### Build Production Release Bundle (AAB)
 ```bash
-# Connect to your Android TV over network ADB
-adb connect <TV_IP_ADDRESS>:5555
-
-# Install the application
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-
-# Launch the app
-adb shell monkey -p com.vividorbit.livetv -c android.intent.category.LAUNCHER 1
+./gradlew bundleRelease
+# Output: app/build/outputs/bundle/release/app-release.aab
 ```
 
 ---
 
-## 🔒 Hardware & Permissions Configuration
+## 🔒 Security & Privacy
 
-VividOrbit declares and requires the following permissions in `AndroidManifest.xml`:
-
-```xml
-<uses-permission android:name="com.android.providers.tv.permission.READ_EPG_DATA" />
-<uses-permission android:name="android.permission.READ_TV_LISTINGS" />
-
-<uses-feature android:name="android.software.leanback" android:required="true" />
-<uses-feature android:name="android.hardware.touchscreen" android:required="false" />
-```
+* **100% Offline by Design**: VividOrbit never contacts any external cloud servers or APIs. All channel renumbering, favorites, and configuration data remain local on your TV.
+* **Ephemeral Local Server**: The embedded configuration server runs **only** when Phone Setup is active on screen and terminates immediately when closed or when the app is backgrounded.
+* **Constant-Time Verification**: All API requests require a cryptographic 32-character hex token verified using `MessageDigest.isEqual` to prevent timing attacks.
 
 ---
 
-## 📜 License
+## 📄 License
 
-This project is open source and available under the [Apache License 2.0](LICENSE).
+Copyright © 2026 VividOrbit. All rights reserved.
