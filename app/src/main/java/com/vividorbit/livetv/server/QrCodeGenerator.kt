@@ -2,6 +2,7 @@ package com.vividorbit.livetv.server
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.util.Log
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
@@ -9,6 +10,7 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import java.util.EnumMap
 
 object QrCodeGenerator {
+    private const val TAG = "QrCodeGenerator"
 
     fun generateQrBitmap(content: String, width: Int = 512, height: Int = 512): Bitmap? {
         return try {
@@ -36,7 +38,7 @@ object QrCodeGenerator {
             bitmap.setPixels(pixels, 0, matrixWidth, 0, 0, matrixWidth, matrixHeight)
             bitmap
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "Failed to generate QR bitmap: ${e.message}", e)
             null
         }
     }

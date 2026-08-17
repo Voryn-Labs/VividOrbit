@@ -59,6 +59,11 @@ class ChannelAdapter(
         holder.bind(channel, channel.id == currentChannelId, isFav, onChannelClick, onChannelLongClick)
     }
 
+    override fun onViewRecycled(holder: ViewHolder) {
+        super.onViewRecycled(holder)
+        holder.recycle()
+    }
+
     override fun getItemCount(): Int = channels.size
 
     fun setCurrentChannel(channelId: Long?) {
@@ -106,6 +111,13 @@ class ChannelAdapter(
 
         init {
             itemView.centerInParentOnFocus()
+        }
+
+        fun recycle() {
+            imageJob?.cancel()
+            imageJob = null
+            epgJob?.cancel()
+            epgJob = null
         }
 
         fun setSelection(isSelected: Boolean) {

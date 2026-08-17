@@ -16,19 +16,24 @@ class TvViewHelper(
 ) {
     companion object {
         private const val TAG = "TvViewHelper"
-        private const val AUDIO_WATCHDOG_INTERVAL_MS = 4000L
+        private const val AUDIO_WATCHDOG_INTERVAL_MS = 3000L
+        private const val MAX_WATCHDOG_ATTEMPTS = 3
     }
 
     private var currentInputId: String? = null
     private var currentChannelId: Long? = null
     private var lastSelectedAudioTrackId: String? = null
     private var hasReceivedFirstFrame = false
+    private var watchdogAttempts = 0
 
     private val watchdogHandler = Handler(Looper.getMainLooper())
     private val audioWatchdogRunnable = object : Runnable {
         override fun run() {
-            ensureAudioTrackSelected()
-            watchdogHandler.postDelayed(this, AUDIO_WATCHDOG_INTERVAL_MS)
+            val isSelected = ensureAudioTrackSelected()
+            if (!isSelected && watchdogAttempts < MAX_WATCHDOG_ATTEMPTS) {
+                watchdogAttempts++
+                watchdogHandler.postDelayed(this, AUDIO_WATCHDOG_INTERVAL_MS)
+            }
         }
     }
 
@@ -52,7 +57,12 @@ class TvViewHelper(
             override fun onTracksChanged(inputId: String, tracks: MutableList<TvTrackInfo>?) {
                 super.onTracksChanged(inputId, tracks)
                 Log.d(TAG, "Tracks changed on input $inputId, track count: ${tracks?.size ?: 0}")
-                ensureAudioTrackSelected()
+                val isSelected = ensureAudioTrackSelected()
+                if (!isSelected) {
+                    watchdogAttempts = 0
+                    watchdogHandler.removeCallbacks(audioWatchdogRunnable)
+                    watchdogHandler.postDelayed(audioWatchdogRunnable, AUDIO_WATCHDOG_INTERVAL_MS)
+                }
             }
 
             override fun onTrackSelected(inputId: String, type: Int, trackId: String?) {
@@ -60,6 +70,7 @@ class TvViewHelper(
                 if (type == TvTrackInfo.TYPE_AUDIO && trackId != null) {
                     Log.d(TAG, "Audio track selected on input $inputId: $trackId")
                     lastSelectedAudioTrackId = trackId
+                    watchdogHandler.removeCallbacks(audioWatchdogRunnable)
                 }
             }
 
@@ -90,6 +101,7 @@ class TvViewHelper(
             currentChannelId = channelId
             lastSelectedAudioTrackId = null
             hasReceivedFirstFrame = false
+            watchdogAttempts = 0
             tvView.tune(inputId, channelUri)
 
             watchdogHandler.removeCallbacks(audioWatchdogRunnable)
@@ -104,21 +116,25 @@ class TvViewHelper(
 
     fun hasStartedPlayback(): Boolean = hasReceivedFirstFrame
 
-    private fun ensureAudioTrackSelected() {
+    private fun ensureAudioTrackSelected(): Boolean {
         val audioTracks = getAudioTracks()
-        if (audioTracks.isEmpty()) return
+        if (audioTracks.isEmpty()) return false
 
         val selected = getSelectedAudioTrack()
         val selectedStillValid = selected != null && audioTracks.any { it.id == selected }
 
-        if (!selectedStillValid) {
-            val preferredStillValid = lastSelectedAudioTrackId?.takeIf { preferred ->
-                audioTracks.any { it.id == preferred }
-            }
-            val targetTrack = preferredStillValid ?: audioTracks[0].id
-            Log.d(TAG, "No valid audio track selected (was: $selected). Selecting: $targetTrack")
-            selectAudioTrack(targetTrack)
+        if (selectedStillValid) {
+            watchdogHandler.removeCallbacks(audioWatchdogRunnable)
+            return true
         }
+
+        val preferredStillValid = lastSelectedAudioTrackId?.takeIf { preferred ->
+            audioTracks.any { it.id == preferred }
+        }
+        val targetTrack = preferredStillValid ?: audioTracks[0].id
+        Log.d(TAG, "No valid audio track selected (was: $selected). Selecting: $targetTrack")
+        selectAudioTrack(targetTrack)
+        return true
     }
 
     private fun getAudioTracks(): List<TvTrackInfo> {

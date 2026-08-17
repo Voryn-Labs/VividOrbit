@@ -10,9 +10,15 @@ data class Program(
     val endTimeUtcMillis: Long,
     val description: String? = null
 ) {
+    companion object {
+        private val timeFormat = ThreadLocal.withInitial {
+            SimpleDateFormat("h:mm a", Locale.getDefault())
+        }
+    }
+
     fun getFormattedTimeWindow(): String {
         return try {
-            val sdf = SimpleDateFormat("h:mm a", Locale.getDefault())
+            val sdf = timeFormat.get() ?: SimpleDateFormat("h:mm a", Locale.getDefault())
             val start = sdf.format(Date(startTimeUtcMillis))
             val end = sdf.format(Date(endTimeUtcMillis))
             "$start – $end"

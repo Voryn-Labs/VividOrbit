@@ -5,20 +5,25 @@ import android.util.Log
 import com.vividorbit.livetv.data.Channel
 import com.vividorbit.livetv.data.ChannelRepository
 import com.vividorbit.livetv.data.StartupMode
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
+import java.io.BufferedInputStream
+import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.security.MessageDigest
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class LocalConfigServer(
@@ -31,12 +36,16 @@ class LocalConfigServer(
 ) {
     companion object {
         private const val TAG = "LocalConfigServer"
+        private const val MAX_HEADER_BYTES = 8192
+        private const val MAX_BODY_BYTES = 65536
+        private const val SOCKET_TIMEOUT_MS = 10000
+        private const val MAX_CONCURRENT_THREADS = 8
     }
 
     private var serverSocket: ServerSocket? = null
     private val isRunning = AtomicBoolean(false)
-    private val threadPool = Executors.newCachedThreadPool()
-    private val serverScope = CoroutineScope(Dispatchers.IO)
+    private var threadPool: ExecutorService? = null
+    private var serverScope: CoroutineScope? = null
 
     fun start(bindAddress: String? = null): Boolean {
         if (isRunning.get()) return true
@@ -44,7 +53,14 @@ class LocalConfigServer(
             val addr = if (bindAddress != null) InetAddress.getByName(bindAddress) else null
             serverSocket = ServerSocket(port, 50, addr)
             isRunning.set(true)
-            threadPool.execute {
+
+            threadPool = Executors.newFixedThreadPool(MAX_CONCURRENT_THREADS)
+            val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+                Log.w(TAG, "Server background coroutine exception: ${throwable.message}")
+            }
+            serverScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + exceptionHandler)
+
+            threadPool?.execute {
                 acceptLoop()
             }
             Log.i(TAG, "Server started on port $port, bound to $bindAddress")
@@ -63,14 +79,35 @@ class LocalConfigServer(
             // ignore
         }
         serverSocket = null
+
+        try {
+            serverScope?.cancel()
+        } catch (e: Exception) {
+            // ignore
+        }
+        serverScope = null
+
+        try {
+            threadPool?.shutdown()
+            if (threadPool?.awaitTermination(500, TimeUnit.MILLISECONDS) == false) {
+                threadPool?.shutdownNow()
+            }
+        } catch (e: Exception) {
+            threadPool?.shutdownNow()
+        }
+        threadPool = null
     }
 
     private fun acceptLoop() {
         while (isRunning.get()) {
             try {
                 val client = serverSocket?.accept() ?: break
-                threadPool.execute {
-                    handleClient(client)
+                threadPool?.execute {
+                    try {
+                        handleClient(client)
+                    } catch (e: Exception) {
+                        Log.d(TAG, "Client socket handled with error: ${e.message}")
+                    }
                 }
             } catch (e: Exception) {
                 if (!isRunning.get()) break
@@ -78,13 +115,32 @@ class LocalConfigServer(
         }
     }
 
+    private fun readLine(input: BufferedInputStream, maxBytes: Int): String? {
+        val bos = ByteArrayOutputStream()
+        var bytesRead = 0
+        while (bytesRead < maxBytes) {
+            val b = input.read()
+            if (b == -1) {
+                return if (bos.size() == 0) null else bos.toString(Charsets.UTF_8.name())
+            }
+            bytesRead++
+            if (b == '\n'.code) {
+                val arr = bos.toByteArray()
+                val len = if (arr.isNotEmpty() && arr.last() == '\r'.code.toByte()) arr.size - 1 else arr.size
+                return String(arr, 0, len, Charsets.UTF_8)
+            }
+            bos.write(b)
+        }
+        return bos.toString(Charsets.UTF_8.name())
+    }
+
     private fun handleClient(socket: Socket) {
         socket.use { s ->
-            s.soTimeout = 10000
-            val input = BufferedReader(InputStreamReader(s.getInputStream(), Charsets.UTF_8))
+            s.soTimeout = SOCKET_TIMEOUT_MS
+            val input = BufferedInputStream(s.getInputStream())
             val output = s.getOutputStream()
 
-            val requestLine = input.readLine() ?: return
+            val requestLine = readLine(input, MAX_HEADER_BYTES) ?: return
             val parts = requestLine.split(" ")
             if (parts.size < 2) return
 
@@ -92,30 +148,35 @@ class LocalConfigServer(
             val fullPath = parts[1]
 
             val headers = mutableMapOf<String, String>()
-            var line: String? = input.readLine()
-            var contentLength = 0
+            var totalHeaderBytes = requestLine.length
+            var line: String? = readLine(input, MAX_HEADER_BYTES)
+
             while (!line.isNullOrBlank()) {
+                totalHeaderBytes += line.length
+                if (totalHeaderBytes > MAX_HEADER_BYTES) {
+                    sendJsonResponse(output, 400, JSONObject().put("error", "Header too large"))
+                    return
+                }
+
                 val colonIdx = line.indexOf(':')
                 if (colonIdx != -1) {
                     val k = line.substring(0, colonIdx).trim().lowercase()
                     val v = line.substring(colonIdx + 1).trim()
                     headers[k] = v
-                    if (k == "content-length") {
-                        contentLength = v.toIntOrNull() ?: 0
-                    }
                 }
-                line = input.readLine()
+                line = readLine(input, MAX_HEADER_BYTES)
             }
 
-            val body = if (contentLength in 1..65536) {
-                val charArray = CharArray(contentLength)
-                var read = 0
-                while (read < contentLength) {
-                    val count = input.read(charArray, read, contentLength - read)
-                    if (count == -1) break
-                    read += count
+            val contentLength = (headers["content-length"]?.toIntOrNull() ?: 0).coerceIn(0, MAX_BODY_BYTES)
+            val body = if (contentLength > 0) {
+                val buffer = ByteArray(contentLength)
+                var totalRead = 0
+                while (totalRead < contentLength) {
+                    val read = input.read(buffer, totalRead, contentLength - totalRead)
+                    if (read == -1) break
+                    totalRead += read
                 }
-                String(charArray, 0, read)
+                String(buffer, 0, totalRead, Charsets.UTF_8)
             } else ""
 
             val path = if (fullPath.contains('?')) fullPath.substringBefore('?') else fullPath
@@ -190,7 +251,8 @@ class LocalConfigServer(
     }
 
     private fun handleGetState(output: OutputStream) {
-        serverScope.launch {
+        val scope = serverScope ?: return
+        scope.launch {
             val channels = repository.getChannels()
             val favorites = repository.getFavoriteIds()
             val json = JSONObject()
@@ -247,7 +309,8 @@ class LocalConfigServer(
                 return
             }
 
-            serverScope.launch {
+            val scope = serverScope ?: return
+            scope.launch {
                 val swappedId = repository.assignChannelNumber(channelId, number)
                 repository.setCustomNumbersEnabled(true)
                 onDataChanged()
@@ -273,7 +336,8 @@ class LocalConfigServer(
                 idList.add(orderedIds.getLong(i))
             }
 
-            serverScope.launch {
+            val scope = serverScope ?: return
+            scope.launch {
                 val newMap = mutableMapOf<Long, String>()
                 idList.forEachIndexed { index, id ->
                     newMap[id] = (index + 1).toString()
@@ -324,7 +388,8 @@ class LocalConfigServer(
     }
 
     private fun handleGetExport(output: OutputStream) {
-        serverScope.launch {
+        val scope = serverScope ?: return
+        scope.launch {
             val channels = repository.getChannels()
             val array = JSONArray()
             for (ch in channels) {
@@ -343,7 +408,8 @@ class LocalConfigServer(
     private fun handlePostImport(output: OutputStream, body: String) {
         try {
             val array = JSONArray(body)
-            serverScope.launch {
+            val scope = serverScope ?: return
+            scope.launch {
                 val currentChannels = repository.getChannels()
                 val newMap = mutableMapOf<Long, String>()
                 var matched = 0
@@ -351,8 +417,8 @@ class LocalConfigServer(
                 for (i in 0 until array.length()) {
                     val item = array.getJSONObject(i)
                     val name = item.optString("name")
-                    val customNum = item.optString("customNumber")
-                    if (name.isNotBlank() && customNum.isNotBlank()) {
+                    val customNum = item.optString("customNumber").trim()
+                    if (name.isNotBlank() && customNum.matches(Regex("^[0-9]{1,4}$"))) {
                         val match = currentChannels.find { it.displayName.equals(name, ignoreCase = true) }
                         if (match != null) {
                             newMap[match.id] = customNum
@@ -380,22 +446,24 @@ class LocalConfigServer(
     }
 
     private fun sendJsonResponse(output: OutputStream, statusCode: Int, json: Any) {
-        val statusText = when (statusCode) {
-            200 -> "OK"
-            400 -> "Bad Request"
-            401 -> "Unauthorized"
-            404 -> "Not Found"
-            else -> "Internal Server Error"
+        try {
+            val statusText = when (statusCode) {
+                200 -> "OK"
+                400 -> "Bad Request"
+                401 -> "Unauthorized"
+                404 -> "Not Found"
+                else -> "Internal Server Error"
+            }
+            val bytes = json.toString().toByteArray(Charsets.UTF_8)
+            val response = "HTTP/1.1 $statusCode $statusText\r\n" +
+                    "Content-Type: application/json; charset=utf-8\r\n" +
+                    "Content-Length: ${bytes.size}\r\n" +
+                    "Connection: close\r\n\r\n"
+            output.write(response.toByteArray(Charsets.UTF_8))
+            output.write(bytes)
+            output.flush()
+        } catch (e: Exception) {
+            Log.d(TAG, "Socket closed during response write: ${e.message}")
         }
-        val bytes = json.toString().toByteArray(Charsets.UTF_8)
-        val response = "HTTP/1.1 $statusCode $statusText\r\n" +
-                "Content-Type: application/json; charset=utf-8\r\n" +
-                "Content-Length: ${bytes.size}\r\n" +
-                "Access-Control-Allow-Origin: *\r\n" +
-                "Access-Control-Allow-Headers: *\r\n" +
-                "Connection: close\r\n\r\n"
-        output.write(response.toByteArray(Charsets.UTF_8))
-        output.write(bytes)
-        output.flush()
     }
 }

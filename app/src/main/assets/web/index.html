@@ -430,9 +430,19 @@
     let activeFilter = 'all';
     let editingChannelId = null;
 
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
     function showToast(msg) {
       const t = document.getElementById('toast');
-      t.innerText = msg;
+      t.textContent = msg;
       t.classList.add('show');
       setTimeout(() => t.classList.remove('show'), 2500);
     }
@@ -449,6 +459,7 @@
       try {
         const res = await fetch(endpoint, opts);
         if (res.status === 401) {
+          sessionStorage.removeItem('vivid_token');
           showToast("⚠ Session expired. Please rescan QR.");
           return null;
         }
@@ -465,7 +476,7 @@
       state = data;
       state.favoriteIds = state.favoriteIds || [];
 
-      document.getElementById('channel-count-text').innerText = `${state.channels.length} channels (${state.favoriteIds.length} ★)`;
+      document.getElementById('channel-count-text').textContent = `${state.channels.length} channels (${state.favoriteIds.length} ★)`;
       document.getElementById('toggle-custom-numbers').checked = state.customNumbersEnabled;
       document.getElementById('select-startup-mode').value = state.startupMode;
 
@@ -477,7 +488,7 @@
       state.channels.forEach(ch => {
         const opt = document.createElement('option');
         opt.value = ch.id;
-        opt.innerText = `${ch.displayNumber}. ${ch.name}`;
+        opt.textContent = `${ch.displayNumber}. ${ch.name}`;
         if (ch.id === state.defaultChannelId) opt.selected = true;
         defSelect.appendChild(opt);
       });
@@ -498,30 +509,88 @@
       container.innerHTML = '';
 
       if (list.length === 0) {
-        container.innerHTML = `<div style="text-align:center; padding: 32px; color: var(--text-secondary); font-size: 14px;">No channels found.</div>`;
+        const emptyDiv = document.createElement('div');
+        emptyDiv.style.textAlign = 'center';
+        emptyDiv.style.padding = '32px';
+        emptyDiv.style.color = 'var(--text-secondary)';
+        emptyDiv.style.fontSize = '14px';
+        emptyDiv.textContent = 'No channels found.';
+        container.appendChild(emptyDiv);
         return;
       }
 
-      list.forEach((ch, idx) => {
+      list.forEach(ch => {
         const isFav = state.favoriteIds.includes(ch.id);
         const card = document.createElement('div');
         card.className = 'channel-card';
-        card.innerHTML = `
-          <div class="channel-info">
-            <button class="icon-btn fav ${isFav ? 'active' : ''}" title="${isFav ? 'Unfavorite' : 'Favorite'}" onclick="toggleFavorite(${ch.id})">${isFav ? '★' : '☆'}</button>
-            <div class="channel-num-badge" onclick="openEditModal(${ch.id})">${ch.displayNumber}</div>
-            <div class="channel-text">
-              <div class="channel-name">${ch.name}</div>
-              <div class="channel-dth">DTH: ${ch.originalNumber}</div>
-            </div>
-          </div>
-          <div class="channel-actions">
-            <button class="icon-btn tune" onclick="tuneChannel(${ch.id})">📺 Tune</button>
-            <button class="icon-btn" title="Move Up" onclick="moveChannel(${idx}, -1)">▲</button>
-            <button class="icon-btn" title="Move Down" onclick="moveChannel(${idx}, 1)">▼</button>
-            <button class="icon-btn" title="Move to Top" onclick="moveToTop(${idx})">🔝</button>
-          </div>
-        `;
+
+        // Left info container
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'channel-info';
+
+        const favBtn = document.createElement('button');
+        favBtn.className = `icon-btn fav ${isFav ? 'active' : ''}`;
+        favBtn.title = isFav ? 'Unfavorite' : 'Favorite';
+        favBtn.textContent = isFav ? '★' : '☆';
+        favBtn.onclick = () => toggleFavorite(ch.id);
+
+        const badge = document.createElement('div');
+        badge.className = 'channel-num-badge';
+        badge.textContent = ch.displayNumber;
+        badge.onclick = () => openEditModal(ch.id);
+
+        const textDiv = document.createElement('div');
+        textDiv.className = 'channel-text';
+
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'channel-name';
+        nameDiv.textContent = ch.name;
+
+        const dthDiv = document.createElement('div');
+        dthDiv.className = 'channel-dth';
+        dthDiv.textContent = `DTH: ${ch.originalNumber}`;
+
+        textDiv.appendChild(nameDiv);
+        textDiv.appendChild(dthDiv);
+
+        infoDiv.appendChild(favBtn);
+        infoDiv.appendChild(badge);
+        infoDiv.appendChild(textDiv);
+
+        // Right actions container
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'channel-actions';
+
+        const tuneBtn = document.createElement('button');
+        tuneBtn.className = 'icon-btn tune';
+        tuneBtn.textContent = '📺 Tune';
+        tuneBtn.onclick = () => tuneChannel(ch.id);
+
+        const upBtn = document.createElement('button');
+        upBtn.className = 'icon-btn';
+        upBtn.title = 'Move Up';
+        upBtn.textContent = '▲';
+        upBtn.onclick = () => moveChannel(ch.id, -1);
+
+        const downBtn = document.createElement('button');
+        downBtn.className = 'icon-btn';
+        downBtn.title = 'Move Down';
+        downBtn.textContent = '▼';
+        downBtn.onclick = () => moveChannel(ch.id, 1);
+
+        const topBtn = document.createElement('button');
+        topBtn.className = 'icon-btn';
+        topBtn.title = 'Move to Top';
+        topBtn.textContent = '🔝';
+        topBtn.onclick = () => moveToTop(ch.id);
+
+        actionsDiv.appendChild(tuneBtn);
+        actionsDiv.appendChild(upBtn);
+        actionsDiv.appendChild(downBtn);
+        actionsDiv.appendChild(topBtn);
+
+        card.appendChild(infoDiv);
+        card.appendChild(actionsDiv);
         container.appendChild(card);
       });
     }
@@ -537,8 +606,8 @@
       if (q) {
         list = list.filter(ch => 
           ch.name.toLowerCase().includes(q) || 
-          ch.displayNumber.includes(q) || 
-          ch.originalNumber.includes(q)
+          String(ch.displayNumber).includes(q) || 
+          String(ch.originalNumber).includes(q)
         );
       }
       renderChannels(list);
@@ -554,12 +623,15 @@
           state.favoriteIds = state.favoriteIds.filter(id => id !== channelId);
           showToast("Removed from Favorites");
         }
-        document.getElementById('channel-count-text').innerText = `${state.channels.length} channels (${state.favoriteIds.length} ★)`;
+        document.getElementById('channel-count-text').textContent = `${state.channels.length} channels (${state.favoriteIds.length} ★)`;
         filterChannels();
       }
     }
 
-    async function moveChannel(index, delta) {
+    async function moveChannel(channelId, delta) {
+      const index = state.channels.findIndex(c => c.id === channelId);
+      if (index === -1) return;
+
       const targetIndex = index + delta;
       if (targetIndex < 0 || targetIndex >= state.channels.length) return;
 
@@ -576,8 +648,10 @@
       }
     }
 
-    async function moveToTop(index) {
-      if (index === 0) return;
+    async function moveToTop(channelId) {
+      const index = state.channels.findIndex(c => c.id === channelId);
+      if (index <= 0) return;
+
       const item = state.channels.splice(index, 1)[0];
       state.channels.unshift(item);
 
@@ -629,8 +703,8 @@
       const ch = state.channels.find(c => c.id === channelId);
       if (!ch) return;
 
-      document.getElementById('modal-channel-name').innerText = ch.name;
-      document.getElementById('modal-dth-info').innerText = `Current Number: ${ch.displayNumber} (DTH: ${ch.originalNumber})`;
+      document.getElementById('modal-channel-name').textContent = ch.name;
+      document.getElementById('modal-dth-info').textContent = `Current Number: ${ch.displayNumber} (DTH: ${ch.originalNumber})`;
       const numInput = document.getElementById('modal-input-number');
       numInput.value = ch.displayNumber;
       
@@ -639,9 +713,9 @@
 
       numInput.oninput = () => {
         const val = numInput.value.trim();
-        const conf = state.channels.find(c => c.displayNumber === val && c.id !== channelId);
+        const conf = state.channels.find(c => String(c.displayNumber) === val && c.id !== channelId);
         if (conf) {
-          conflictDiv.innerText = `⚠ Used by ${conf.name}. Saving will swap numbers.`;
+          conflictDiv.textContent = `⚠ Used by ${conf.name}. Saving will swap numbers.`;
           conflictDiv.style.display = 'block';
         } else {
           conflictDiv.style.display = 'none';

@@ -5,28 +5,34 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.LruCache
-import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 
 object ChannelLogoLoader {
 
+    private const val NEGATIVE_CACHE_TTL_MS = 5 * 60 * 1000L // 5 minutes
     private val maxMemoryKb = (Runtime.getRuntime().maxMemory() / 1024).toInt()
     private val cacheSizeKb = maxMemoryKb / 8
     private val cache = object : LruCache<Long, Bitmap>(cacheSizeKb) {
         override fun sizeOf(key: Long, bitmap: Bitmap): Int = bitmap.byteCount / 1024
     }
-    private val misses = Collections.synchronizedSet(mutableSetOf<Long>())
+    private val missesWithTimestamp = ConcurrentHashMap<Long, Long>()
 
     fun getCached(channelId: Long): Bitmap? = cache.get(channelId)
 
     fun evictAll() {
         cache.evictAll()
-        misses.clear()
+        missesWithTimestamp.clear()
     }
 
     fun loadAndCache(context: Context, channelId: Long, logoUri: Uri?, reqSize: Int = 200): Bitmap? {
         if (logoUri == null) return null
         cache.get(channelId)?.let { return it }
-        if (misses.contains(channelId)) return null
+
+        val now = System.currentTimeMillis()
+        val missTime = missesWithTimestamp[channelId]
+        if (missTime != null && (now - missTime) < NEGATIVE_CACHE_TTL_MS) {
+            return null
+        }
 
         return try {
             var inSampleSize = 1
@@ -51,15 +57,16 @@ object ChannelLogoLoader {
                 }
                 BitmapFactory.decodeStream(input, null, options)?.also { bitmap ->
                     cache.put(channelId, bitmap)
+                    missesWithTimestamp.remove(channelId)
                 }
             }
 
             if (decodedBitmap == null) {
-                misses.add(channelId)
+                missesWithTimestamp[channelId] = now
             }
             decodedBitmap
         } catch (e: Exception) {
-            misses.add(channelId)
+            missesWithTimestamp[channelId] = now
             null
         }
     }

@@ -11,7 +11,7 @@ obj/
 .classpath
 project.properties
 
-# Intellij
+# Intellij & IDE
 out/
 .idea/
 *.iml
@@ -21,3 +21,6 @@ build/
 local.properties
 .DS_Store
 *.apk
+*.aab
+.omo/
+.codegraph

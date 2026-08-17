@@ -6,6 +6,7 @@ import android.database.Cursor
 import android.media.tv.TvContract
 import android.media.tv.TvInputInfo
 import android.media.tv.TvInputManager
+import android.net.Uri
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -32,7 +33,6 @@ class ChannelRepository(private val context: Context) {
         private const val PREFS_NAME = "vividorbit_prefs"
         private const val PREF_USE_CUSTOM_NUMBERS = "use_custom_channel_numbers"
         private const val PREF_CUSTOM_NUMBERS_JSON = "custom_channel_numbers_json"
-        private const val PREF_BACKUP_CUSTOM_NUMBERS_JSON = "backup_custom_channel_numbers_json"
         private const val PREF_PREFERRED_INPUT_ID = "preferred_tuner_input_id"
         private const val PREF_STARTUP_MODE = "startup_mode"
         private const val PREF_DEFAULT_CHANNEL_ID = "default_channel_id"
@@ -44,6 +44,8 @@ class ChannelRepository(private val context: Context) {
     private val prefs: SharedPreferences by lazy {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
+
+    private var cachedFavorites: Set<Long>? = null
 
     @Synchronized
     fun isCustomNumbersEnabled(): Boolean {
@@ -98,7 +100,15 @@ class ChannelRepository(private val context: Context) {
 
     @Synchronized
     fun getFavoriteIds(): Set<Long> {
-        val jsonStr = prefs.getString(PREF_FAVORITES_JSON, null) ?: return emptySet()
+        val cached = cachedFavorites
+        if (cached != null) return cached
+
+        val jsonStr = prefs.getString(PREF_FAVORITES_JSON, null)
+        if (jsonStr.isNullOrBlank()) {
+            cachedFavorites = emptySet()
+            return emptySet()
+        }
+
         val result = mutableSetOf<Long>()
         try {
             val array = JSONArray(jsonStr)
@@ -108,11 +118,13 @@ class ChannelRepository(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing favorites JSON: ${e.message}", e)
         }
+        cachedFavorites = result
         return result
     }
 
     @Synchronized
     fun setFavoriteIds(ids: Set<Long>) {
+        cachedFavorites = ids
         val array = JSONArray()
         ids.forEach { array.put(it) }
         prefs.edit().putString(PREF_FAVORITES_JSON, array.toString()).apply()
@@ -192,10 +204,7 @@ class ChannelRepository(private val context: Context) {
 
     @Synchronized
     fun getCustomNumbersMap(): Map<Long, String> {
-        var jsonStr = prefs.getString(PREF_CUSTOM_NUMBERS_JSON, null)
-        if (jsonStr.isNullOrBlank()) {
-            jsonStr = prefs.getString(PREF_BACKUP_CUSTOM_NUMBERS_JSON, null)
-        }
+        val jsonStr = prefs.getString(PREF_CUSTOM_NUMBERS_JSON, null)
         if (jsonStr.isNullOrBlank()) return emptyMap()
 
         val result = mutableMapOf<Long, String>()
@@ -221,16 +230,16 @@ class ChannelRepository(private val context: Context) {
         for ((k, v) in map) {
             json.put(k.toString(), v)
         }
-        val str = json.toString()
-        prefs.edit()
-            .putString(PREF_CUSTOM_NUMBERS_JSON, str)
-            .putString(PREF_BACKUP_CUSTOM_NUMBERS_JSON, str)
-            .apply()
+        prefs.edit().putString(PREF_CUSTOM_NUMBERS_JSON, json.toString()).apply()
     }
 
     suspend fun assignChannelNumber(channelId: Long, newNumber: String): Long? = withContext(Dispatchers.IO) {
         val currentMap = getCustomNumbersMap().toMutableMap()
         val oldNumber = currentMap[channelId]
+
+        if (oldNumber == newNumber) {
+            return@withContext null
+        }
 
         var swappedChannelId: Long? = null
         val conflictingEntry = currentMap.entries.find { it.value == newNumber && it.key != channelId }
@@ -267,6 +276,33 @@ class ChannelRepository(private val context: Context) {
         setCustomNumbersEnabled(false)
     }
 
+    private fun parseChannelsFromCursor(
+        cursor: Cursor,
+        defaultInputId: String,
+        channels: MutableList<Channel>
+    ) {
+        val idIndex = cursor.getColumnIndex(TvContract.Channels._ID)
+        val numberIndex = cursor.getColumnIndex(TvContract.Channels.COLUMN_DISPLAY_NUMBER)
+        val nameIndex = cursor.getColumnIndex(TvContract.Channels.COLUMN_DISPLAY_NAME)
+        val inputIdIndex = cursor.getColumnIndex(TvContract.Channels.COLUMN_INPUT_ID)
+
+        while (cursor.moveToNext()) {
+            val id = if (idIndex != -1) cursor.getLong(idIndex) else -1L
+            val number = if (numberIndex != -1) cursor.getString(numberIndex) ?: "" else ""
+            var name = if (nameIndex != -1) cursor.getString(nameIndex) ?: "" else ""
+            val resolvedInputId = if (inputIdIndex != -1) cursor.getString(inputIdIndex) ?: defaultInputId else defaultInputId
+            val logoUri = TvContract.buildChannelLogoUri(id)
+
+            if (name.isBlank()) {
+                name = if (number.isNotBlank()) "Channel $number" else "Channel $id"
+            }
+
+            if (id != -1L && channels.none { it.id == id }) {
+                channels.add(Channel(id, number, null, number, name, resolvedInputId, logoUri))
+            }
+        }
+    }
+
     private fun fetchRawChannels(): List<Channel> {
         val channels = mutableListOf<Channel>()
         val projection = arrayOf(
@@ -289,13 +325,13 @@ class ChannelRepository(private val context: Context) {
         }
 
         for (inputId in targetInputIds) {
-            try {
-                val queryUri = if (inputId.isNotEmpty()) {
-                    TvContract.buildChannelsUriForInput(inputId)
-                } else {
-                    TvContract.Channels.CONTENT_URI
-                }
+            val queryUri = if (inputId.isNotEmpty()) {
+                TvContract.buildChannelsUriForInput(inputId)
+            } else {
+                TvContract.Channels.CONTENT_URI
+            }
 
+            try {
                 context.contentResolver.query(
                     queryUri,
                     projection,
@@ -303,63 +339,20 @@ class ChannelRepository(private val context: Context) {
                     null,
                     null
                 )?.use { cursor ->
-                    val idIndex = cursor.getColumnIndex(TvContract.Channels._ID)
-                    val numberIndex = cursor.getColumnIndex(TvContract.Channels.COLUMN_DISPLAY_NUMBER)
-                    val nameIndex = cursor.getColumnIndex(TvContract.Channels.COLUMN_DISPLAY_NAME)
-                    val inputIdIndex = cursor.getColumnIndex(TvContract.Channels.COLUMN_INPUT_ID)
-
-                    while (cursor.moveToNext()) {
-                        val id = if (idIndex != -1) cursor.getLong(idIndex) else -1L
-                        val number = if (numberIndex != -1) cursor.getString(numberIndex) ?: "" else ""
-                        var name = if (nameIndex != -1) cursor.getString(nameIndex) ?: "" else ""
-                        val resolvedInputId = if (inputIdIndex != -1) cursor.getString(inputIdIndex) ?: inputId else inputId
-                        val logoUri = TvContract.buildChannelLogoUri(id)
-
-                        if (name.isBlank()) {
-                            name = if (number.isNotBlank()) "Channel $number" else "Channel $id"
-                        }
-
-                        if (id != -1L && channels.none { it.id == id }) {
-                            channels.add(Channel(id, number, null, number, name, resolvedInputId, logoUri))
-                        }
-                    }
+                    parseChannelsFromCursor(cursor, inputId, channels)
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 try {
-                    val fallbackUri = if (inputId.isNotEmpty()) {
-                        TvContract.buildChannelsUriForInput(inputId)
-                    } else {
-                        TvContract.Channels.CONTENT_URI
-                    }
                     context.contentResolver.query(
-                        fallbackUri,
+                        queryUri,
                         projection,
                         null,
                         null,
                         null
                     )?.use { cursor ->
-                        val idIndex = cursor.getColumnIndex(TvContract.Channels._ID)
-                        val numberIndex = cursor.getColumnIndex(TvContract.Channels.COLUMN_DISPLAY_NUMBER)
-                        val nameIndex = cursor.getColumnIndex(TvContract.Channels.COLUMN_DISPLAY_NAME)
-                        val inputIdIndex = cursor.getColumnIndex(TvContract.Channels.COLUMN_INPUT_ID)
-
-                        while (cursor.moveToNext()) {
-                            val id = if (idIndex != -1) cursor.getLong(idIndex) else -1L
-                            val number = if (numberIndex != -1) cursor.getString(numberIndex) ?: "" else ""
-                            var name = if (nameIndex != -1) cursor.getString(nameIndex) ?: "" else ""
-                            val resolvedInputId = if (inputIdIndex != -1) cursor.getString(inputIdIndex) ?: inputId else inputId
-                            val logoUri = TvContract.buildChannelLogoUri(id)
-
-                            if (name.isBlank()) {
-                                name = if (number.isNotBlank()) "Channel $number" else "Channel $id"
-                            }
-
-                            if (id != -1L && channels.none { it.id == id }) {
-                                channels.add(Channel(id, number, null, number, name, resolvedInputId, logoUri))
-                            }
-                        }
+                        parseChannelsFromCursor(cursor, inputId, channels)
                     }
                 } catch (ex: Exception) {
                     Log.e(TAG, "Error querying raw channels: ${ex.message}", ex)

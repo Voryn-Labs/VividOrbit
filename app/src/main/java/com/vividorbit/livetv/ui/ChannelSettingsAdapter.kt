@@ -34,6 +34,11 @@ class ChannelSettingsAdapter(
         holder.bind(channel, onChannelClick, onChannelLongClick)
     }
 
+    override fun onViewRecycled(holder: ViewHolder) {
+        super.onViewRecycled(holder)
+        holder.recycle()
+    }
+
     override fun getItemCount(): Int = channels.size
 
     fun updateChannels(newChannels: List<Channel>) {
@@ -53,11 +58,15 @@ class ChannelSettingsAdapter(
         private val logoImage: ImageView = itemView.findViewById(R.id.settings_channel_logo)
         private val nameText: TextView = itemView.findViewById(R.id.settings_channel_name)
         private val dthNumberText: TextView = itemView.findViewById(R.id.settings_dth_number)
-        private val editBadge: TextView = itemView.findViewById(R.id.settings_edit_badge)
         private var imageJob: Job? = null
 
         init {
             itemView.centerInParentOnFocus()
+        }
+
+        fun recycle() {
+            imageJob?.cancel()
+            imageJob = null
         }
 
         fun bind(

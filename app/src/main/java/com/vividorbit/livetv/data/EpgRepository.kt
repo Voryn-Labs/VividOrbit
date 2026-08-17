@@ -3,6 +3,7 @@ package com.vividorbit.livetv.data
 import android.content.Context
 import android.media.tv.TvContract
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
@@ -80,6 +81,8 @@ class EpgRepository(private val context: Context) {
             val result = EpgResult(current, next, now)
             cache[channelId] = result
             Pair(current, next)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "EPG query failed for channel $channelId: ${e.message}")
             val fallback = EpgResult(null, null, now)

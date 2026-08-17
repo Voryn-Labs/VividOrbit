@@ -11,6 +11,7 @@ import android.media.tv.TvView
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
@@ -32,9 +33,11 @@ import com.vividorbit.livetv.server.QrCodeGenerator
 import com.vividorbit.livetv.ui.ChannelAdapter
 import com.vividorbit.livetv.ui.ChannelLogoLoader
 import com.vividorbit.livetv.ui.ChannelSettingsAdapter
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.security.SecureRandom
@@ -42,9 +45,13 @@ import kotlin.coroutines.CoroutineContext
 
 class MainActivity : Activity(), CoroutineScope {
 
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e("MainActivity", "Uncaught coroutine exception: ${throwable.message}", throwable)
+    }
+
     private lateinit var job: Job
     override val coroutineContext: CoroutineContext
-        get() = Dispatchers.Main + job
+        get() = Dispatchers.Main + job + exceptionHandler
 
     private lateinit var tvView: TvView
     private lateinit var tvViewHelper: TvViewHelper
@@ -190,7 +197,7 @@ class MainActivity : Activity(), CoroutineScope {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        job = Job()
+        job = SupervisorJob()
         setContentView(R.layout.activity_main)
 
         mediaSession = MediaSession(this, "VividOrbitLiveTv")
@@ -877,7 +884,8 @@ class MainActivity : Activity(), CoroutineScope {
                 (::editNumberCard.isInitialized && editNumberCard.visibility == View.VISIBLE) ||
                 (::startupPickerCard.isInitialized && startupPickerCard.visibility == View.VISIBLE) ||
                 (::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE) ||
-                (::confirmActionCard.isInitialized && confirmActionCard.visibility == View.VISIBLE)
+                (::confirmActionCard.isInitialized && confirmActionCard.visibility == View.VISIBLE) ||
+                (::numericEntryCard.isInitialized && numericEntryCard.visibility == View.VISIBLE)
     }
 
     private fun tuneToChannelNumber(number: String) {
@@ -895,8 +903,11 @@ class MainActivity : Activity(), CoroutineScope {
             val numericMatch = allChannels.find { it.displayNumber.toIntOrNull() == parsedTarget }
             if (numericMatch != null) {
                 tuneToChannel(numericMatch)
+                return
             }
         }
+
+        Toast.makeText(this, "Channel $trimmed not found", Toast.LENGTH_SHORT).show()
     }
 
     private fun resetSidebarTimer() {
@@ -912,6 +923,7 @@ class MainActivity : Activity(), CoroutineScope {
         startupPickerCard.visibility = View.GONE
         qrPanelCard.visibility = View.GONE
         confirmActionCard.visibility = View.GONE
+        if (::numericEntryCard.isInitialized) numericEntryCard.visibility = View.GONE
         sidebarContainer.visibility = View.VISIBLE
 
         val activeChannel = selectedChannel
@@ -942,10 +954,12 @@ class MainActivity : Activity(), CoroutineScope {
         if (::editNumberCard.isInitialized) editNumberCard.visibility = View.GONE
         if (::startupPickerCard.isInitialized) startupPickerCard.visibility = View.GONE
         if (::confirmActionCard.isInitialized) confirmActionCard.visibility = View.GONE
+        if (::numericEntryCard.isInitialized) numericEntryCard.visibility = View.GONE
         if (::qrPanelCard.isInitialized) {
             qrPanelCard.visibility = View.GONE
             localConfigServer?.stop()
             localConfigServer = null
+            currentSessionToken = ""
         }
         sidebarHandler.removeCallbacks(hideSidebarRunnable)
     }
@@ -1180,6 +1194,7 @@ class MainActivity : Activity(), CoroutineScope {
         super.onStop()
         localConfigServer?.stop()
         localConfigServer = null
+        currentSessionToken = ""
         if (!isChangingConfigurations) {
             finish()
         }
@@ -1212,6 +1227,7 @@ class MainActivity : Activity(), CoroutineScope {
     override fun onDestroy() {
         localConfigServer?.stop()
         localConfigServer = null
+        currentSessionToken = ""
         if (::mediaSession.isInitialized) {
             mediaSession.release()
         }

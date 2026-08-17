@@ -3,10 +3,12 @@ package com.vividorbit.livetv.server
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.util.Log
 import java.net.Inet4Address
 import java.net.NetworkInterface
 
 object NetworkUtils {
+    private const val TAG = "NetworkUtils"
 
     fun getLocalIpAddress(context: Context): String? {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
@@ -36,7 +38,7 @@ object NetworkUtils {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "Failed to resolve local IP address: ${e.message}", e)
         }
         return null
     }
