@@ -34,4 +34,14 @@
     <string name="offline_warning">⚠ No Network Connected\nPlease connect your TV to Wi-Fi or Ethernet to use Phone Setup.</string>
     <string name="btn_disconnect">Disconnect &amp; Close</string>
     <string name="default_channel_set_toast">Set as default startup channel: %1$s</string>
+
+    <!-- Phase 6 & Phase 7 Strings -->
+    <string name="next_program_prefix">Next: %1$s</string>
+    <string name="confirm_auto_renumber_title">Auto-Renumber All Channels?</string>
+    <string name="confirm_auto_renumber_desc">This will assign numbers 1 to N consecutively to all channels in the current order.</string>
+    <string name="confirm_reset_dth_title">Reset to Broadcaster Numbers?</string>
+    <string name="confirm_reset_dth_desc">This will turn off custom numbering and restore original DTH channel numbers.</string>
+    <string name="btn_confirm">Confirm</string>
+    <string name="accessibility_channel_format">Channel %1$s, %2$s</string>
+    <string name="accessibility_channel_with_epg_format">Channel %1$s, %2$s, now playing %3$s</string>
 </resources>

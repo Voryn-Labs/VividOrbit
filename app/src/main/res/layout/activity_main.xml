@@ -5,6 +5,7 @@
     android:layout_height="match_parent"
     android:background="@color/bg_dark">
 
+    <!-- 100% Full-bleed TvView (Never letterboxed) -->
     <android.media.tv.TvView
         android:id="@+id/tv_view"
         android:layout_width="match_parent"
@@ -34,15 +35,18 @@
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent" />
 
-    <!-- Sidebar Guide -->
+    <!-- Sidebar Guide (Overscan safe padding applied) -->
     <LinearLayout
         android:id="@+id/sidebar_container"
-        android:layout_width="350dp"
+        android:layout_width="380dp"
         android:layout_height="match_parent"
         android:orientation="vertical"
         android:background="@drawable/sidebar_bg"
         android:elevation="4dp"
         android:visibility="gone"
+        android:paddingStart="32dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent">
@@ -52,9 +56,9 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingStart="18dp"
+            android:paddingStart="12dp"
             android:paddingEnd="16dp"
-            android:paddingTop="16dp"
+            android:paddingTop="12dp"
             android:paddingBottom="12dp">
 
             <TextView
@@ -116,15 +120,18 @@
         </FrameLayout>
     </LinearLayout>
 
-    <!-- Settings Menu -->
+    <!-- Settings Menu (Overscan safe padding applied) -->
     <LinearLayout
         android:id="@+id/settings_container"
-        android:layout_width="350dp"
+        android:layout_width="380dp"
         android:layout_height="match_parent"
         android:orientation="vertical"
         android:background="@drawable/sidebar_bg"
         android:elevation="6dp"
         android:visibility="gone"
+        android:paddingStart="32dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent">
@@ -134,9 +141,9 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingStart="18dp"
+            android:paddingStart="12dp"
             android:paddingEnd="16dp"
-            android:paddingTop="16dp"
+            android:paddingTop="12dp"
             android:paddingBottom="12dp">
 
             <TextView
@@ -178,8 +185,8 @@
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:padding="12dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="6dp"
             android:layout_marginTop="8dp"
             android:layout_marginBottom="4dp"
             android:focusable="true"
@@ -229,8 +236,8 @@
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:padding="12dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="6dp"
             android:layout_marginBottom="4dp"
             android:focusable="true"
             android:clickable="true"
@@ -276,8 +283,8 @@
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:padding="12dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="6dp"
             android:layout_marginBottom="6dp"
             android:focusable="true"
             android:clickable="true"
@@ -311,8 +318,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
             android:paddingBottom="8dp">
 
             <TextView
@@ -409,6 +416,7 @@
                     android:layout_width="36dp"
                     android:layout_height="36dp"
                     android:scaleType="fitCenter"
+                    android:contentDescription="@null"
                     android:src="@android:drawable/ic_menu_slideshow" />
 
                 <TextView
@@ -504,6 +512,88 @@
                     android:textColor="@color/text_primary"
                     android:textSize="14sp"
                     android:text="@string/btn_save" />
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- Confirmation Modal Card (Destructive Actions) -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/confirm_action_card"
+        android:layout_width="400dp"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:cardCornerRadius="10dp"
+        app:cardBackgroundColor="@color/panel_bg_elevated"
+        app:cardElevation="20dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <TextView
+                android:id="@+id/confirm_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_primary"
+                android:fontFamily="sans-serif-medium"
+                android:textSize="18sp"
+                android:text="Confirm Action" />
+
+            <TextView
+                android:id="@+id/confirm_desc"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp"
+                android:lineSpacingExtra="3dp"
+                android:text="Are you sure you want to proceed?" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/confirm_cancel_btn"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="6dp"
+                    android:gravity="center"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
+                    android:focusable="true"
+                    android:clickable="true"
+                    android:background="@drawable/btn_primary_selector"
+                    android:fontFamily="sans-serif-medium"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+                    android:text="@string/btn_cancel" />
+
+                <TextView
+                    android:id="@+id/confirm_ok_btn"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:gravity="center"
+                    android:paddingTop="10dp"
+                    android:paddingBottom="10dp"
+                    android:focusable="true"
+                    android:clickable="true"
+                    android:background="@drawable/btn_primary_selector"
+                    android:fontFamily="sans-serif-medium"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+                    android:text="@string/btn_confirm" />
             </LinearLayout>
         </LinearLayout>
     </androidx.cardview.widget.CardView>
@@ -654,6 +744,7 @@
                     android:layout_height="200dp"
                     android:padding="6dp"
                     android:background="#FFFFFF"
+                    android:contentDescription="@null"
                     android:scaleType="fitCenter" />
 
                 <TextView
@@ -737,12 +828,12 @@
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
-    <!-- Floating Numeric Keypad Entry -->
+    <!-- Floating Numeric Keypad Entry (48dp Overscan margin) -->
     <androidx.cardview.widget.CardView
         android:id="@+id/numeric_entry_card"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_margin="28dp"
+        android:layout_margin="48dp"
         android:visibility="gone"
         app:cardCornerRadius="8dp"
         app:cardBackgroundColor="@color/panel_bg_elevated"
@@ -763,12 +854,12 @@
             android:textSize="40sp" />
     </androidx.cardview.widget.CardView>
 
-    <!-- Bottom Channel Info Banner -->
+    <!-- Bottom Channel Info Banner with EPG Container (Overscan 48dp bottom margin) -->
     <androidx.cardview.widget.CardView
         android:id="@+id/channel_banner_card"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="44dp"
+        android:layout_marginBottom="48dp"
         android:visibility="gone"
         app:cardCornerRadius="10dp"
         app:cardBackgroundColor="@color/panel_bg_elevated"
@@ -780,47 +871,124 @@
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
+            android:orientation="vertical"
             android:paddingStart="24dp"
             android:paddingEnd="28dp"
-            android:paddingTop="18dp"
-            android:paddingBottom="18dp">
+            android:paddingTop="16dp"
+            android:paddingBottom="16dp">
 
-            <TextView
-                android:id="@+id/banner_channel_number"
+            <!-- Top Row: Channel Number, Divider, Logo, Name -->
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-light"
-                android:textColor="@color/text_primary"
-                android:textSize="34sp"
-                android:text="12" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
 
-            <View
-                android:layout_width="1dp"
-                android:layout_height="32dp"
-                android:layout_marginStart="20dp"
-                android:layout_marginEnd="20dp"
-                android:background="@color/hairline" />
+                <TextView
+                    android:id="@+id/banner_channel_number"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-light"
+                    android:textColor="@color/text_primary"
+                    android:textSize="32sp"
+                    android:text="12" />
 
-            <ImageView
-                android:id="@+id/banner_channel_logo"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_marginEnd="18dp"
-                android:padding="6dp"
-                android:background="@drawable/logo_frame_bg"
-                android:scaleType="fitCenter"
-                android:src="@android:drawable/ic_menu_slideshow" />
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="28dp"
+                    android:layout_marginStart="18dp"
+                    android:layout_marginEnd="18dp"
+                    android:background="@color/hairline" />
 
-            <TextView
-                android:id="@+id/banner_channel_name"
-                android:layout_width="wrap_content"
+                <ImageView
+                    android:id="@+id/banner_channel_logo"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_marginEnd="16dp"
+                    android:padding="5dp"
+                    android:background="@drawable/logo_frame_bg"
+                    android:scaleType="fitCenter"
+                    android:contentDescription="@null"
+                    android:src="@android:drawable/ic_menu_slideshow" />
+
+                <TextView
+                    android:id="@+id/banner_channel_name"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:textColor="@color/text_primary"
+                    android:textSize="20sp"
+                    android:text="Channel Name" />
+            </LinearLayout>
+
+            <!-- Collapsible EPG Section (Zero-gap when no EPG broadcasted) -->
+            <LinearLayout
+                android:id="@+id/banner_epg_layout"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-medium"
-                android:textColor="@color/text_primary"
-                android:textSize="22sp"
-                android:text="Channel Name" />
+                android:orientation="vertical"
+                android:layout_marginTop="10dp"
+                android:visibility="gone">
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginBottom="10dp"
+                    android:background="@color/hairline" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:id="@+id/banner_program_title"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:fontFamily="sans-serif-medium"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:text="Program Title" />
+
+                    <TextView
+                        android:id="@+id/banner_program_time"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:fontFamily="sans-serif"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp"
+                        android:text="9:00 PM – 9:30 PM" />
+                </LinearLayout>
+
+                <ProgressBar
+                    android:id="@+id/banner_program_progress"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="3dp"
+                    android:layout_marginTop="6dp"
+                    android:layout_marginBottom="4dp"
+                    android:progress="45"
+                    android:max="100" />
+
+                <TextView
+                    android:id="@+id/banner_next_program"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="sans-serif"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:visibility="gone"
+                    android:text="Next: Program" />
+            </LinearLayout>
+
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 

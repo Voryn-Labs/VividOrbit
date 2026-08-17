@@ -22,6 +22,7 @@
         android:fontFamily="sans-serif-medium"
         android:textColor="@color/badge_number_text_color"
         android:textSize="14sp"
+        android:importantForAccessibility="no"
         android:text="1" />
 
     <ImageView
@@ -31,14 +32,16 @@
         android:layout_marginStart="10dp"
         android:layout_marginEnd="10dp"
         android:scaleType="fitCenter"
-        android:contentDescription="Channel Logo"
+        android:contentDescription="@null"
+        android:importantForAccessibility="no"
         android:src="@android:drawable/ic_menu_slideshow" />
 
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:importantForAccessibility="no">
 
         <TextView
             android:id="@+id/settings_channel_name"
@@ -49,6 +52,7 @@
             android:textSize="15sp"
             android:ellipsize="end"
             android:maxLines="1"
+            android:importantForAccessibility="no"
             android:text="Channel Name" />
 
         <TextView
@@ -58,6 +62,7 @@
             android:fontFamily="sans-serif"
             android:textColor="@color/text_secondary"
             android:textSize="11sp"
+            android:importantForAccessibility="no"
             android:text="DTH: 104" />
     </LinearLayout>
 
@@ -74,6 +79,7 @@
         android:fontFamily="sans-serif-medium"
         android:textColor="@color/text_primary"
         android:textSize="12sp"
+        android:importantForAccessibility="no"
         android:text="Edit" />
 
 </LinearLayout>

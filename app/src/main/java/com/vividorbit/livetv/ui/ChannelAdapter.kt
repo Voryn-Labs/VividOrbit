@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.vividorbit.livetv.R
 import com.vividorbit.livetv.data.Channel
+import com.vividorbit.livetv.data.EpgRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -19,6 +20,7 @@ class ChannelAdapter(
     private var channels: List<Channel> = emptyList(),
     private val scope: CoroutineScope,
     private var currentChannelId: Long? = null,
+    private val epgRepository: EpgRepository? = null,
     private val onChannelClick: (Channel) -> Unit,
     private val onChannelLongClick: ((Channel) -> Boolean)? = null
 ) : RecyclerView.Adapter<ChannelAdapter.ViewHolder>() {
@@ -31,7 +33,7 @@ class ChannelAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_channel, parent, false)
-        return ViewHolder(view, scope)
+        return ViewHolder(view, scope, epgRepository)
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int, payloads: MutableList<Any>) {
@@ -73,11 +75,17 @@ class ChannelAdapter(
         }
     }
 
-    class ViewHolder(itemView: View, private val scope: CoroutineScope) : RecyclerView.ViewHolder(itemView) {
+    class ViewHolder(
+        itemView: View,
+        private val scope: CoroutineScope,
+        private val epgRepository: EpgRepository?
+    ) : RecyclerView.ViewHolder(itemView) {
         private val numberText: TextView = itemView.findViewById(R.id.channel_number)
         private val logoImage: ImageView = itemView.findViewById(R.id.channel_logo)
         private val nameText: TextView = itemView.findViewById(R.id.channel_name)
+        private val programText: TextView = itemView.findViewById(R.id.channel_program)
         private var imageJob: Job? = null
+        private var epgJob: Job? = null
 
         init {
             itemView.centerInParentOnFocus()
@@ -97,8 +105,13 @@ class ChannelAdapter(
             nameText.text = channel.displayName
             itemView.isSelected = isCurrentlyPlaying
 
-            imageJob?.cancel()
+            itemView.contentDescription = itemView.context.getString(
+                R.string.accessibility_channel_format,
+                channel.displayNumber,
+                channel.displayName
+            )
 
+            imageJob?.cancel()
             val cachedBitmap = ChannelLogoLoader.getCached(channel.id)
             if (cachedBitmap != null) {
                 logoImage.setImageBitmap(cachedBitmap)
@@ -109,6 +122,28 @@ class ChannelAdapter(
                     if (bitmap != null) {
                         withContext(Dispatchers.Main) {
                             logoImage.setImageBitmap(bitmap)
+                        }
+                    }
+                }
+            }
+
+            epgJob?.cancel()
+            programText.visibility = View.GONE
+            if (epgRepository != null) {
+                epgJob = scope.launch(Dispatchers.IO) {
+                    val (nowProgram, _) = epgRepository.getNowAndNext(channel.id)
+                    withContext(Dispatchers.Main) {
+                        if (nowProgram != null && nowProgram.title.isNotBlank()) {
+                            programText.text = nowProgram.title
+                            programText.visibility = View.VISIBLE
+                            itemView.contentDescription = itemView.context.getString(
+                                R.string.accessibility_channel_with_epg_format,
+                                channel.displayNumber,
+                                channel.displayName,
+                                nowProgram.title
+                            )
+                        } else {
+                            programText.visibility = View.GONE
                         }
                     }
                 }

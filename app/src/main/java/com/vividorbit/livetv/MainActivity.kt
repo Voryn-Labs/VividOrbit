@@ -23,6 +23,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.vividorbit.livetv.data.Channel
 import com.vividorbit.livetv.data.ChannelRepository
+import com.vividorbit.livetv.data.EpgRepository
 import com.vividorbit.livetv.data.StartupMode
 import com.vividorbit.livetv.player.TvViewHelper
 import com.vividorbit.livetv.server.LocalConfigServer
@@ -48,6 +49,7 @@ class MainActivity : Activity(), CoroutineScope {
     private lateinit var tvView: TvView
     private lateinit var tvViewHelper: TvViewHelper
     private lateinit var repository: ChannelRepository
+    private lateinit var epgRepository: EpgRepository
 
     private lateinit var progressBar: ProgressBar
     private lateinit var channelUnavailableText: TextView
@@ -98,6 +100,13 @@ class MainActivity : Activity(), CoroutineScope {
     private lateinit var qrRetryBtn: TextView
     private lateinit var qrCloseBtn: TextView
 
+    private lateinit var confirmActionCard: CardView
+    private lateinit var confirmTitle: TextView
+    private lateinit var confirmDesc: TextView
+    private lateinit var confirmCancelBtn: TextView
+    private lateinit var confirmOkBtn: TextView
+    private var pendingConfirmAction: (() -> Unit)? = null
+
     private var localConfigServer: LocalConfigServer? = null
     private var currentSessionToken: String = ""
 
@@ -105,6 +114,11 @@ class MainActivity : Activity(), CoroutineScope {
     private lateinit var bannerChannelNumber: TextView
     private lateinit var bannerChannelLogo: ImageView
     private lateinit var bannerChannelName: TextView
+    private lateinit var bannerEpgLayout: View
+    private lateinit var bannerProgramTitle: TextView
+    private lateinit var bannerProgramTime: TextView
+    private lateinit var bannerProgramProgress: ProgressBar
+    private lateinit var bannerNextProgram: TextView
 
     private val bannerHandler = Handler(Looper.getMainLooper())
     private val hideBannerRunnable = Runnable {
@@ -160,7 +174,7 @@ class MainActivity : Activity(), CoroutineScope {
         private const val ZAP_DEBOUNCE_MS = 120L
 
         private const val SIDEBAR_AUTO_HIDE_MS = 20000L
-        private const val BANNER_AUTO_HIDE_MS = 5000L
+        private const val BANNER_AUTO_HIDE_MS = 6000L
         private const val NUMERIC_ENTRY_TIMEOUT_MS = 3000L
         private const val NUMERIC_ENTRY_MAX_DIGITS = 4
 
@@ -222,12 +236,24 @@ class MainActivity : Activity(), CoroutineScope {
         qrRetryBtn = findViewById(R.id.qr_retry_btn)
         qrCloseBtn = findViewById(R.id.qr_close_btn)
 
+        confirmActionCard = findViewById(R.id.confirm_action_card)
+        confirmTitle = findViewById(R.id.confirm_title)
+        confirmDesc = findViewById(R.id.confirm_desc)
+        confirmCancelBtn = findViewById(R.id.confirm_cancel_btn)
+        confirmOkBtn = findViewById(R.id.confirm_ok_btn)
+
         channelBannerCard = findViewById(R.id.channel_banner_card)
         bannerChannelNumber = findViewById(R.id.banner_channel_number)
         bannerChannelLogo = findViewById(R.id.banner_channel_logo)
         bannerChannelName = findViewById(R.id.banner_channel_name)
+        bannerEpgLayout = findViewById(R.id.banner_epg_layout)
+        bannerProgramTitle = findViewById(R.id.banner_program_title)
+        bannerProgramTime = findViewById(R.id.banner_program_time)
+        bannerProgramProgress = findViewById(R.id.banner_program_progress)
+        bannerNextProgram = findViewById(R.id.banner_next_program)
 
         repository = ChannelRepository(this)
+        epgRepository = EpgRepository(this)
 
         sidebarSettingsBtn.setOnClickListener {
             openSettings()
@@ -250,11 +276,29 @@ class MainActivity : Activity(), CoroutineScope {
         }
 
         settingsAutoRenumberBtn.setOnClickListener {
-            autoRenumberLinear()
+            showConfirmation(
+                title = getString(R.string.confirm_auto_renumber_title),
+                desc = getString(R.string.confirm_auto_renumber_desc),
+                onConfirm = { autoRenumberLinear() }
+            )
         }
 
         settingsResetDthBtn.setOnClickListener {
-            resetToDth()
+            showConfirmation(
+                title = getString(R.string.confirm_reset_dth_title),
+                desc = getString(R.string.confirm_reset_dth_desc),
+                onConfirm = { resetToDth() }
+            )
+        }
+
+        confirmCancelBtn.setOnClickListener {
+            closeConfirmation()
+        }
+
+        confirmOkBtn.setOnClickListener {
+            val action = pendingConfirmAction
+            closeConfirmation()
+            action?.invoke()
         }
 
         editCancelBtn.setOnClickListener {
@@ -341,6 +385,7 @@ class MainActivity : Activity(), CoroutineScope {
         channelAdapter = ChannelAdapter(
             channels = emptyList(),
             scope = this,
+            epgRepository = epgRepository,
             onChannelClick = { channel ->
                 tuneToChannel(channel)
                 hideSidebar()
@@ -492,6 +537,22 @@ class MainActivity : Activity(), CoroutineScope {
     private fun closeStartupPicker() {
         startupPickerCard.visibility = View.GONE
         settingsStartupRow.requestFocus()
+        resetSidebarTimer()
+    }
+
+    private fun showConfirmation(title: String, desc: String, onConfirm: () -> Unit) {
+        confirmTitle.text = title
+        confirmDesc.text = desc
+        pendingConfirmAction = onConfirm
+        confirmActionCard.visibility = View.VISIBLE
+        confirmCancelBtn.requestFocus()
+        resetSidebarTimer()
+    }
+
+    private fun closeConfirmation() {
+        confirmActionCard.visibility = View.GONE
+        pendingConfirmAction = null
+        settingsAutoRenumberBtn.requestFocus()
         resetSidebarTimer()
     }
 
@@ -674,6 +735,7 @@ class MainActivity : Activity(), CoroutineScope {
     private fun showBottomBanner(channel: Channel) {
         bannerChannelNumber.text = channel.displayNumber
         bannerChannelName.text = channel.displayName
+        bannerEpgLayout.visibility = View.GONE
 
         val cachedLogo = ChannelLogoLoader.getCached(channel.id)
         if (cachedLogo != null) {
@@ -690,6 +752,30 @@ class MainActivity : Activity(), CoroutineScope {
                             bannerChannelLogo.setImageResource(android.R.drawable.ic_menu_slideshow)
                         }
                     }
+                }
+            }
+        }
+
+        launch(Dispatchers.IO) {
+            val (nowProgram, nextProgram) = epgRepository.getNowAndNext(channel.id)
+            withContext(Dispatchers.Main) {
+                if (selectedChannel?.id == channel.id && nowProgram != null && nowProgram.title.isNotBlank()) {
+                    bannerProgramTitle.text = nowProgram.title
+                    bannerProgramTime.text = nowProgram.getFormattedTimeWindow()
+                    bannerProgramProgress.progress = nowProgram.getProgressPercent()
+
+                    if (nextProgram != null && nextProgram.title.isNotBlank()) {
+                        val nextTime = nextProgram.getFormattedTimeWindow().substringBefore(" – ")
+                        val suffix = if (nextTime.isNotBlank()) " ($nextTime)" else ""
+                        bannerNextProgram.text = getString(R.string.next_program_prefix, "${nextProgram.title}$suffix")
+                        bannerNextProgram.visibility = View.VISIBLE
+                    } else {
+                        bannerNextProgram.visibility = View.GONE
+                    }
+
+                    bannerEpgLayout.visibility = View.VISIBLE
+                } else if (selectedChannel?.id == channel.id) {
+                    bannerEpgLayout.visibility = View.GONE
                 }
             }
         }
@@ -734,7 +820,8 @@ class MainActivity : Activity(), CoroutineScope {
                 (::settingsContainer.isInitialized && settingsContainer.visibility == View.VISIBLE) ||
                 (::editNumberCard.isInitialized && editNumberCard.visibility == View.VISIBLE) ||
                 (::startupPickerCard.isInitialized && startupPickerCard.visibility == View.VISIBLE) ||
-                (::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE)
+                (::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE) ||
+                (::confirmActionCard.isInitialized && confirmActionCard.visibility == View.VISIBLE)
     }
 
     private fun tuneToChannelNumber(number: String) {
@@ -768,6 +855,7 @@ class MainActivity : Activity(), CoroutineScope {
         editNumberCard.visibility = View.GONE
         startupPickerCard.visibility = View.GONE
         qrPanelCard.visibility = View.GONE
+        confirmActionCard.visibility = View.GONE
         sidebarContainer.visibility = View.VISIBLE
 
         val activeChannel = selectedChannel
@@ -796,6 +884,7 @@ class MainActivity : Activity(), CoroutineScope {
         if (::settingsContainer.isInitialized) settingsContainer.visibility = View.GONE
         if (::editNumberCard.isInitialized) editNumberCard.visibility = View.GONE
         if (::startupPickerCard.isInitialized) startupPickerCard.visibility = View.GONE
+        if (::confirmActionCard.isInitialized) confirmActionCard.visibility = View.GONE
         if (::qrPanelCard.isInitialized) {
             qrPanelCard.visibility = View.GONE
             localConfigServer?.stop()
@@ -806,6 +895,14 @@ class MainActivity : Activity(), CoroutineScope {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         resetSidebarTimer()
+
+        if (::confirmActionCard.isInitialized && confirmActionCard.visibility == View.VISIBLE) {
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                closeConfirmation()
+                return true
+            }
+            return super.onKeyDown(keyCode, event)
+        }
 
         if (::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE) {
             if (keyCode == KeyEvent.KEYCODE_BACK) {
@@ -988,6 +1085,7 @@ class MainActivity : Activity(), CoroutineScope {
         super.onTrimMemory(level)
         if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
             ChannelLogoLoader.evictAll()
+            epgRepository.clearCache()
         }
     }
 
