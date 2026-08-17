@@ -19,4 +19,19 @@
     <string name="conflict_swap_format">⚠ Number %1$s is used by %2$s. Saving will swap.</string>
     <string name="btn_save">Save</string>
     <string name="btn_cancel">Cancel</string>
+
+    <!-- Phase 4 & Phase 5 Strings -->
+    <string name="startup_channel_title">Startup Channel</string>
+    <string name="startup_mode_last">Last Watched</string>
+    <string name="startup_mode_fixed_format">Fixed (%1$s)</string>
+    <string name="startup_mode_first">First in List</string>
+    <string name="startup_picker_title">Select Default Startup Channel</string>
+
+    <string name="phone_setup_btn">📱 Phone Setup (QR Code)</string>
+    <string name="phone_setup_desc">Reorder channels and edit lineup on your phone</string>
+    <string name="phone_setup_title">Phone Configuration</string>
+    <string name="qr_instructions">Scan this QR code with your phone camera or visit the URL below on the same Wi-Fi network:</string>
+    <string name="offline_warning">⚠ No Network Connected\nPlease connect your TV to Wi-Fi or Ethernet to use Phone Setup.</string>
+    <string name="btn_disconnect">Disconnect &amp; Close</string>
+    <string name="default_channel_set_toast">Set as default startup channel: %1$s</string>
 </resources>

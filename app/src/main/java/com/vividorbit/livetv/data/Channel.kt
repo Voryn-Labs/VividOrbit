@@ -9,5 +9,5 @@ data class Channel(
     val displayNumber: String,
     val displayName: String,
     val inputId: String,
-    val logoUri: Uri
+    val logoUri: Uri? = null
 )

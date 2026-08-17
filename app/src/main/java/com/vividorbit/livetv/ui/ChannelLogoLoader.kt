@@ -23,7 +23,8 @@ object ChannelLogoLoader {
         misses.clear()
     }
 
-    fun loadAndCache(context: Context, channelId: Long, logoUri: Uri, reqSize: Int = 200): Bitmap? {
+    fun loadAndCache(context: Context, channelId: Long, logoUri: Uri?, reqSize: Int = 200): Bitmap? {
+        if (logoUri == null) return null
         cache.get(channelId)?.let { return it }
         if (misses.contains(channelId)) return null
 

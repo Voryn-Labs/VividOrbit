@@ -18,7 +18,8 @@ import kotlinx.coroutines.withContext
 class ChannelSettingsAdapter(
     private var channels: List<Channel> = emptyList(),
     private val scope: CoroutineScope,
-    private val onChannelClick: (Channel) -> Unit
+    private val onChannelClick: (Channel) -> Unit,
+    private val onChannelLongClick: ((Channel) -> Boolean)? = null
 ) : RecyclerView.Adapter<ChannelSettingsAdapter.ViewHolder>() {
 
     private var updateJob: Job? = null
@@ -30,7 +31,7 @@ class ChannelSettingsAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val channel = channels[position]
-        holder.bind(channel, onChannelClick)
+        holder.bind(channel, onChannelClick, onChannelLongClick)
     }
 
     override fun getItemCount(): Int = channels.size
@@ -59,7 +60,11 @@ class ChannelSettingsAdapter(
             itemView.centerInParentOnFocus()
         }
 
-        fun bind(channel: Channel, onClick: (Channel) -> Unit) {
+        fun bind(
+            channel: Channel,
+            onClick: (Channel) -> Unit,
+            onLongClick: ((Channel) -> Boolean)?
+        ) {
             customNumberText.text = channel.displayNumber
             nameText.text = channel.displayName
             dthNumberText.text = itemView.context.getString(R.string.dth_format, channel.originalDisplayNumber)
@@ -83,6 +88,14 @@ class ChannelSettingsAdapter(
 
             itemView.setOnClickListener {
                 onClick(channel)
+            }
+
+            if (onLongClick != null) {
+                itemView.setOnLongClickListener {
+                    onLongClick(channel)
+                }
+            } else {
+                itemView.setOnLongClickListener(null)
             }
         }
     }

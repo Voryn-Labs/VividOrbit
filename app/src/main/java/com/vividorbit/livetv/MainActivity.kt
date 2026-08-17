@@ -17,12 +17,17 @@ import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.cardview.widget.CardView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.vividorbit.livetv.data.Channel
 import com.vividorbit.livetv.data.ChannelRepository
+import com.vividorbit.livetv.data.StartupMode
 import com.vividorbit.livetv.player.TvViewHelper
+import com.vividorbit.livetv.server.LocalConfigServer
+import com.vividorbit.livetv.server.NetworkUtils
+import com.vividorbit.livetv.server.QrCodeGenerator
 import com.vividorbit.livetv.ui.ChannelAdapter
 import com.vividorbit.livetv.ui.ChannelLogoLoader
 import com.vividorbit.livetv.ui.ChannelSettingsAdapter
@@ -31,6 +36,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.security.SecureRandom
 import kotlin.coroutines.CoroutineContext
 
 class MainActivity : Activity(), CoroutineScope {
@@ -57,6 +63,9 @@ class MainActivity : Activity(), CoroutineScope {
     private lateinit var settingsCloseBtn: TextView
     private lateinit var settingsToggleRow: View
     private lateinit var settingsToggleBadge: TextView
+    private lateinit var settingsStartupRow: View
+    private lateinit var settingsStartupSubtitle: TextView
+    private lateinit var settingsPhoneSetupRow: View
     private lateinit var settingsAutoRenumberBtn: TextView
     private lateinit var settingsResetDthBtn: TextView
     private lateinit var settingsRecyclerView: RecyclerView
@@ -73,6 +82,24 @@ class MainActivity : Activity(), CoroutineScope {
     private var editingChannel: Channel? = null
     private var editBuffer: String = ""
     private var isFirstDigitAfterOpen = true
+
+    private lateinit var startupPickerCard: CardView
+    private lateinit var startupOptLast: TextView
+    private lateinit var startupOptFirst: TextView
+    private lateinit var startupChannelRecycler: RecyclerView
+    private lateinit var startupCancelBtn: TextView
+    private lateinit var startupPickerAdapter: ChannelAdapter
+
+    private lateinit var qrPanelCard: CardView
+    private lateinit var qrConnectedLayout: View
+    private lateinit var qrOfflineLayout: View
+    private lateinit var qrImageView: ImageView
+    private lateinit var qrUrlText: TextView
+    private lateinit var qrRetryBtn: TextView
+    private lateinit var qrCloseBtn: TextView
+
+    private var localConfigServer: LocalConfigServer? = null
+    private var currentSessionToken: String = ""
 
     private lateinit var channelBannerCard: CardView
     private lateinit var bannerChannelNumber: TextView
@@ -140,12 +167,7 @@ class MainActivity : Activity(), CoroutineScope {
         private const val TUNING_SHOW_DELAY_MS = 500L
         private const val TUNING_FALLBACK_TIMEOUT_MS = 8000L
         private const val SUSTAINED_BUFFERING_THRESHOLD_MS = 3000L
-
-        private const val PREFS_NAME = "vividorbit_prefs"
-        private const val PREF_LAST_CHANNEL_ID = "last_channel_id"
     }
-
-    private val prefs by lazy { getSharedPreferences(PREFS_NAME, MODE_PRIVATE) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -171,6 +193,9 @@ class MainActivity : Activity(), CoroutineScope {
         settingsCloseBtn = findViewById(R.id.settings_close_btn)
         settingsToggleRow = findViewById(R.id.settings_toggle_row)
         settingsToggleBadge = findViewById(R.id.settings_toggle_badge)
+        settingsStartupRow = findViewById(R.id.settings_startup_row)
+        settingsStartupSubtitle = findViewById(R.id.settings_startup_subtitle)
+        settingsPhoneSetupRow = findViewById(R.id.settings_phone_setup_row)
         settingsAutoRenumberBtn = findViewById(R.id.settings_auto_renumber_btn)
         settingsResetDthBtn = findViewById(R.id.settings_reset_dth_btn)
         settingsRecyclerView = findViewById(R.id.settings_recycler_view)
@@ -182,6 +207,20 @@ class MainActivity : Activity(), CoroutineScope {
         editConflictText = findViewById(R.id.edit_conflict_text)
         editCancelBtn = findViewById(R.id.edit_cancel_btn)
         editSaveBtn = findViewById(R.id.edit_save_btn)
+
+        startupPickerCard = findViewById(R.id.startup_picker_card)
+        startupOptLast = findViewById(R.id.startup_opt_last)
+        startupOptFirst = findViewById(R.id.startup_opt_first)
+        startupChannelRecycler = findViewById(R.id.startup_channel_recycler)
+        startupCancelBtn = findViewById(R.id.startup_cancel_btn)
+
+        qrPanelCard = findViewById(R.id.qr_panel_card)
+        qrConnectedLayout = findViewById(R.id.qr_connected_layout)
+        qrOfflineLayout = findViewById(R.id.qr_offline_layout)
+        qrImageView = findViewById(R.id.qr_image_view)
+        qrUrlText = findViewById(R.id.qr_url_text)
+        qrRetryBtn = findViewById(R.id.qr_retry_btn)
+        qrCloseBtn = findViewById(R.id.qr_close_btn)
 
         channelBannerCard = findViewById(R.id.channel_banner_card)
         bannerChannelNumber = findViewById(R.id.banner_channel_number)
@@ -202,6 +241,14 @@ class MainActivity : Activity(), CoroutineScope {
             toggleCustomNumbers()
         }
 
+        settingsStartupRow.setOnClickListener {
+            openStartupPicker()
+        }
+
+        settingsPhoneSetupRow.setOnClickListener {
+            openPhoneSetup()
+        }
+
         settingsAutoRenumberBtn.setOnClickListener {
             autoRenumberLinear()
         }
@@ -216,6 +263,30 @@ class MainActivity : Activity(), CoroutineScope {
 
         editSaveBtn.setOnClickListener {
             saveEditedNumber()
+        }
+
+        startupOptLast.setOnClickListener {
+            repository.setStartupMode(StartupMode.LAST_WATCHED)
+            closeStartupPicker()
+            updateSettingsToggleUi()
+        }
+
+        startupOptFirst.setOnClickListener {
+            repository.setStartupMode(StartupMode.FIRST_CHANNEL)
+            closeStartupPicker()
+            updateSettingsToggleUi()
+        }
+
+        startupCancelBtn.setOnClickListener {
+            closeStartupPicker()
+        }
+
+        qrRetryBtn.setOnClickListener {
+            openPhoneSetup()
+        }
+
+        qrCloseBtn.setOnClickListener {
+            closePhoneSetup()
         }
 
         tvViewHelper = TvViewHelper(
@@ -273,6 +344,13 @@ class MainActivity : Activity(), CoroutineScope {
             onChannelClick = { channel ->
                 tuneToChannel(channel)
                 hideSidebar()
+            },
+            onChannelLongClick = { channel ->
+                repository.setStartupMode(StartupMode.FIXED_DEFAULT)
+                repository.setDefaultChannelId(channel.id)
+                Toast.makeText(this, getString(R.string.default_channel_set_toast, channel.displayName), Toast.LENGTH_SHORT).show()
+                updateSettingsToggleUi()
+                true
             }
         )
         channelRecyclerView.layoutManager = LinearLayoutManager(this)
@@ -285,12 +363,33 @@ class MainActivity : Activity(), CoroutineScope {
             scope = this,
             onChannelClick = { channel ->
                 openEditNumberDialog(channel)
+            },
+            onChannelLongClick = { channel ->
+                repository.setStartupMode(StartupMode.FIXED_DEFAULT)
+                repository.setDefaultChannelId(channel.id)
+                Toast.makeText(this, getString(R.string.default_channel_set_toast, channel.displayName), Toast.LENGTH_SHORT).show()
+                updateSettingsToggleUi()
+                true
             }
         )
         settingsRecyclerView.layoutManager = LinearLayoutManager(this)
         settingsRecyclerView.setHasFixedSize(true)
         settingsRecyclerView.itemAnimator = null
         settingsRecyclerView.adapter = channelSettingsAdapter
+
+        startupPickerAdapter = ChannelAdapter(
+            channels = emptyList(),
+            scope = this,
+            onChannelClick = { channel ->
+                repository.setStartupMode(StartupMode.FIXED_DEFAULT)
+                repository.setDefaultChannelId(channel.id)
+                closeStartupPicker()
+                updateSettingsToggleUi()
+            }
+        )
+        startupChannelRecycler.layoutManager = LinearLayoutManager(this)
+        startupChannelRecycler.setHasFixedSize(true)
+        startupChannelRecycler.adapter = startupPickerAdapter
 
         if (checkSelfPermission(PRIMARY_PERMISSION) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(PRIMARY_PERMISSION, OPTIONAL_EPG_PERMISSION), PERMISSION_REQUEST_CODE)
@@ -306,20 +405,17 @@ class MainActivity : Activity(), CoroutineScope {
 
             channelAdapter.updateChannels(allChannels)
             channelSettingsAdapter.updateChannels(allChannels)
+            startupPickerAdapter.updateChannels(allChannels)
 
             progressBar.visibility = View.GONE
             updateSidebarHeader(allChannels.size)
             updateSettingsToggleUi()
 
             if (allChannels.isNotEmpty()) {
-                val activeChannel = selectedChannel
-                val startChannel = if (preserveCurrentChannel && activeChannel != null) {
-                    allChannels.find { it.id == activeChannel.id } ?: allChannels[0]
-                } else {
-                    val lastChannelId = prefs.getLong(PREF_LAST_CHANNEL_ID, -1L)
-                    allChannels.find { it.id == lastChannelId } ?: allChannels[0]
+                val startChannel = repository.resolveStartupChannel(allChannels, preserveCurrentChannel, selectedChannel)
+                if (startChannel != null) {
+                    tuneToChannel(startChannel)
                 }
-                tuneToChannel(startChannel)
             } else {
                 showSidebar()
             }
@@ -335,6 +431,22 @@ class MainActivity : Activity(), CoroutineScope {
         val enabled = repository.isCustomNumbersEnabled()
         settingsToggleBadge.text = if (enabled) getString(R.string.toggle_on) else getString(R.string.toggle_off)
         settingsToggleBadge.isSelected = enabled
+
+        val mode = repository.getStartupMode()
+        when (mode) {
+            StartupMode.LAST_WATCHED -> {
+                settingsStartupSubtitle.text = getString(R.string.startup_mode_last)
+            }
+            StartupMode.FIRST_CHANNEL -> {
+                settingsStartupSubtitle.text = getString(R.string.startup_mode_first)
+            }
+            StartupMode.FIXED_DEFAULT -> {
+                val defaultId = repository.getDefaultChannelId()
+                val defChannel = allChannels.find { it.id == defaultId }
+                val title = defChannel?.displayName ?: "Channel"
+                settingsStartupSubtitle.text = getString(R.string.startup_mode_fixed_format, title)
+            }
+        }
     }
 
     private fun openSettings() {
@@ -367,6 +479,81 @@ class MainActivity : Activity(), CoroutineScope {
         } else {
             channelRecyclerView.requestFocus()
         }
+        resetSidebarTimer()
+    }
+
+    private fun openStartupPicker() {
+        startupPickerCard.visibility = View.VISIBLE
+        startupPickerAdapter.updateChannels(allChannels)
+        startupOptLast.requestFocus()
+        resetSidebarTimer()
+    }
+
+    private fun closeStartupPicker() {
+        startupPickerCard.visibility = View.GONE
+        settingsStartupRow.requestFocus()
+        resetSidebarTimer()
+    }
+
+    private fun openPhoneSetup() {
+        val ip = NetworkUtils.getLocalIpAddress(this)
+        if (ip.isNullOrBlank()) {
+            qrConnectedLayout.visibility = View.GONE
+            qrOfflineLayout.visibility = View.VISIBLE
+            qrPanelCard.visibility = View.VISIBLE
+            qrRetryBtn.requestFocus()
+            return
+        }
+
+        if (currentSessionToken.isEmpty()) {
+            val random = SecureRandom()
+            val bytes = ByteArray(16)
+            random.nextBytes(bytes)
+            currentSessionToken = bytes.joinToString("") { "%02x".format(it) }
+        }
+
+        val url = "http://$ip:8080/?t=$currentSessionToken"
+        qrUrlText.text = url
+
+        val qrBitmap = QrCodeGenerator.generateQrBitmap(url, 400, 400)
+        if (qrBitmap != null) {
+            qrImageView.setImageBitmap(qrBitmap)
+        }
+
+        qrOfflineLayout.visibility = View.GONE
+        qrConnectedLayout.visibility = View.VISIBLE
+        qrPanelCard.visibility = View.VISIBLE
+
+        if (localConfigServer == null) {
+            localConfigServer = LocalConfigServer(
+                context = this,
+                repository = repository,
+                port = 8080,
+                sessionToken = currentSessionToken,
+                onDataChanged = {
+                    runOnUiThread {
+                        loadChannelData(preserveCurrentChannel = true)
+                    }
+                },
+                onTuneRequested = { channelId ->
+                    runOnUiThread {
+                        allChannels.find { it.id == channelId }?.let { tuneToChannel(it) }
+                    }
+                }
+            )
+            localConfigServer?.start()
+        }
+
+        qrCloseBtn.requestFocus()
+        resetSidebarTimer()
+    }
+
+    private fun closePhoneSetup() {
+        localConfigServer?.stop()
+        localConfigServer = null
+        currentSessionToken = ""
+        qrPanelCard.visibility = View.GONE
+        settingsPhoneSetupRow.requestFocus()
         resetSidebarTimer()
     }
 
@@ -468,9 +655,7 @@ class MainActivity : Activity(), CoroutineScope {
     private fun tuneToChannel(channel: Channel) {
         pendingZapChannel = null
         selectedChannel = channel
-        prefs.edit()
-            .putLong(PREF_LAST_CHANNEL_ID, channel.id)
-            .apply()
+        repository.setLastChannelId(channel.id)
         showBottomBanner(channel)
         channelUnavailableText.visibility = View.GONE
 
@@ -547,7 +732,9 @@ class MainActivity : Activity(), CoroutineScope {
     private fun isAnyMenuVisible(): Boolean {
         return (::sidebarContainer.isInitialized && sidebarContainer.visibility == View.VISIBLE) ||
                 (::settingsContainer.isInitialized && settingsContainer.visibility == View.VISIBLE) ||
-                (::editNumberCard.isInitialized && editNumberCard.visibility == View.VISIBLE)
+                (::editNumberCard.isInitialized && editNumberCard.visibility == View.VISIBLE) ||
+                (::startupPickerCard.isInitialized && startupPickerCard.visibility == View.VISIBLE) ||
+                (::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE)
     }
 
     private fun tuneToChannelNumber(number: String) {
@@ -579,6 +766,8 @@ class MainActivity : Activity(), CoroutineScope {
     private fun showSidebar() {
         settingsContainer.visibility = View.GONE
         editNumberCard.visibility = View.GONE
+        startupPickerCard.visibility = View.GONE
+        qrPanelCard.visibility = View.GONE
         sidebarContainer.visibility = View.VISIBLE
 
         val activeChannel = selectedChannel
@@ -606,11 +795,39 @@ class MainActivity : Activity(), CoroutineScope {
         if (::sidebarContainer.isInitialized) sidebarContainer.visibility = View.GONE
         if (::settingsContainer.isInitialized) settingsContainer.visibility = View.GONE
         if (::editNumberCard.isInitialized) editNumberCard.visibility = View.GONE
+        if (::startupPickerCard.isInitialized) startupPickerCard.visibility = View.GONE
+        if (::qrPanelCard.isInitialized) {
+            qrPanelCard.visibility = View.GONE
+            localConfigServer?.stop()
+            localConfigServer = null
+        }
         sidebarHandler.removeCallbacks(hideSidebarRunnable)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         resetSidebarTimer()
+
+        if (::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE) {
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                closePhoneSetup()
+                return true
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                if (qrRetryBtn.isFocused) {
+                    openPhoneSetup()
+                } else {
+                    closePhoneSetup()
+                }
+                return true
+            }
+        }
+
+        if (::startupPickerCard.isInitialized && startupPickerCard.visibility == View.VISIBLE) {
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                closeStartupPicker()
+                return true
+            }
+        }
 
         if (::editNumberCard.isInitialized && editNumberCard.visibility == View.VISIBLE) {
             if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
@@ -776,6 +993,8 @@ class MainActivity : Activity(), CoroutineScope {
 
     override fun onStop() {
         super.onStop()
+        localConfigServer?.stop()
+        localConfigServer = null
         if (!isChangingConfigurations) {
             finish()
         }
@@ -806,6 +1025,8 @@ class MainActivity : Activity(), CoroutineScope {
     }
 
     override fun onDestroy() {
+        localConfigServer?.stop()
+        localConfigServer = null
         if (::mediaSession.isInitialized) {
             mediaSession.release()
         }

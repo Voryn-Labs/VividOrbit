@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>VividOrbit — TV Lineup Manager</title>
+  <style>
+    :root {
+      --bg: #0B0B0C;
+      --card-bg: #161618;
+      --card-hover: #1D1D20;
+      --border: #29292C;
+      --text-primary: #F2F2F3;
+      --text-secondary: #8A8A8E;
+      --accent: #E5484D;
+      --accent-green: #30A46C;
+      --accent-blue: #3E63DD;
+      --radius: 10px;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--text-primary);
+      padding: 16px;
+      max-width: 680px;
+      margin: 0 auto;
+      min-height: 100vh;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .brand-sub {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .btn-sync {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-sync:active {
+      background: var(--card-hover);
+    }
+    .section-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 12px;
+    }
+    .settings-grid {
+      display: grid;
+      gap: 12px;
+    }
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .setting-label {
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .setting-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+      background-color: var(--border);
+      transition: .2s; border-radius: 24px;
+    }
+    .slider:before {
+      position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
+      background-color: white; transition: .2s; border-radius: 50%;
+    }
+    input:checked + .slider { background-color: var(--accent-green); }
+    input:checked + .slider:before { transform: translateX(20px); }
+    
+    select, input[type="text"], input[type="number"] {
+      background: #111113;
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+    }
+    select {
+      max-width: 180px;
+    }
+    .btn-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .action-btn {
+      flex: 1;
+      min-width: 120px;
+      background: #202024;
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+    }
+    .action-btn:active {
+      background: #2B2B30;
+    }
+    .action-btn.primary {
+      background: var(--accent-blue);
+      border-color: #5B7BF0;
+    }
+    .search-box {
+      width: 100%;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: var(--text-primary);
+      font-size: 14px;
+      margin-bottom: 12px;
+      outline: none;
+    }
+    .search-box:focus {
+      border-color: #555;
+    }
+    .channel-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .channel-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .channel-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 0;
+    }
+    .channel-num-badge {
+      background: #242428;
+      border: 1px solid #38383E;
+      color: #FFF;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      min-width: 44px;
+      text-align: center;
+      cursor: pointer;
+    }
+    .channel-text {
+      flex: 1;
+      min-width: 0;
+    }
+    .channel-name {
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .channel-dth {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+    .channel-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .icon-btn {
+      background: #202024;
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .icon-btn:active { background: #2F2F35; }
+    .icon-btn.tune {
+      background: #192B47;
+      border-color: #2D4C7C;
+      color: #79B8FF;
+      width: auto;
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1C1C20;
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s ease;
+      z-index: 1000;
+    }
+    .toast.show { opacity: 1; }
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.75);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 999;
+    }
+    .modal-card {
+      background: #161618;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 100%;
+      max-width: 360px;
+      padding: 20px;
+    }
+    .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+    .modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div>
+        <div class="brand-title">VividOrbit Live TV</div>
+        <div class="brand-sub" id="channel-count-text">Connecting...</div>
+      </div>
+    </div>
+    <button class="btn-sync" onclick="loadState()">
+      <span>↻</span> Sync
+    </button>
+  </header>
+
+  <!-- Preferences / Controls -->
+  <div class="section-card">
+    <div class="section-title">Settings & Lineup Management</div>
+    <div class="settings-grid">
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Custom Channel Numbers</div>
+          <div class="setting-desc">Enable custom linear ordering</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggle-custom-numbers" onchange="updateCustomToggle()">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Startup Mode</div>
+          <div class="setting-desc">Channel tuned on app launch</div>
+        </div>
+        <select id="select-startup-mode" onchange="updateStartupMode()">
+          <option value="last">Last Watched</option>
+          <option value="fixed">Fixed Default</option>
+          <option value="first">First in List</option>
+        </select>
+      </div>
+
+      <div class="setting-row" id="row-default-channel" style="display:none;">
+        <div>
+          <div class="setting-label">Default Channel</div>
+          <div class="setting-desc">Select fixed channel</div>
+        </div>
+        <select id="select-default-channel" onchange="updateDefaultChannel()"></select>
+      </div>
+
+      <div class="btn-group">
+        <button class="action-btn" onclick="autoRenumber()">⚡ Auto 1..N</button>
+        <button class="action-btn" onclick="exportLineup()">💾 Backup JSON</button>
+        <button class="action-btn" onclick="triggerImport()">📥 Restore</button>
+        <input type="file" id="file-import" style="display:none" accept=".json" onchange="handleFileImport(event)">
+      </div>
+    </div>
+  </div>
+
+  <!-- Search -->
+  <input type="text" class="search-box" id="search-input" placeholder="Search channels by name or number..." oninput="filterChannels()">
+
+  <!-- Channel List -->
+  <div class="channel-list" id="channel-container"></div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <!-- Edit Number Modal -->
+  <div class="modal-overlay" id="edit-modal" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-title" id="modal-channel-name">Edit Channel Number</div>
+      <div style="margin-bottom: 12px; font-size: 13px; color: var(--text-secondary);" id="modal-dth-info"></div>
+      <input type="number" id="modal-input-number" style="width: 100%; font-size: 18px; text-align: center; font-weight: 700; padding: 10px;" min="1" max="9999">
+      <div id="modal-conflict-warning" style="color: #F08C00; font-size: 12px; margin-top: 8px; display: none;"></div>
+      <div class="modal-actions">
+        <button class="action-btn" onclick="closeEditModal()">Cancel</button>
+        <button class="action-btn primary" onclick="saveModalNumber()">Save & Swap</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let sessionToken = "__SESSION_TOKEN__";
+    if (sessionToken === "__" + "SESSION_TOKEN__" || !sessionToken) {
+      const urlParams = new URLSearchParams(window.location.search);
+      sessionToken = urlParams.get('t') || sessionStorage.getItem('vivid_token') || "";
+    }
+    if (sessionToken) {
+      sessionStorage.setItem('vivid_token', sessionToken);
+    }
+
+    let state = {
+      channels: [],
+      customNumbersEnabled: false,
+      startupMode: "last",
+      defaultChannelId: -1
+    };
+
+    let editingChannelId = null;
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.innerText = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+
+    async function apiRequest(endpoint, method = 'GET', data = null) {
+      const opts = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Token': sessionToken
+        }
+      };
+      if (data) opts.body = JSON.stringify(data);
+      try {
+        const res = await fetch(endpoint, opts);
+        if (res.status === 401) {
+          showToast("⚠ Session expired. Please rescan QR.");
+          return null;
+        }
+        return await res.json();
+      } catch (e) {
+        showToast("⚠ Connection error");
+        return null;
+      }
+    }
+
+    async function loadState() {
+      const data = await apiRequest('/api/state');
+      if (!data) return;
+      state = data;
+
+      document.getElementById('channel-count-text').innerText = `${state.channels.length} channels loaded`;
+      document.getElementById('toggle-custom-numbers').checked = state.customNumbersEnabled;
+      document.getElementById('select-startup-mode').value = state.startupMode;
+
+      const defRow = document.getElementById('row-default-channel');
+      const defSelect = document.getElementById('select-default-channel');
+      defRow.style.display = state.startupMode === 'fixed' ? 'flex' : 'none';
+
+      defSelect.innerHTML = '';
+      state.channels.forEach(ch => {
+        const opt = document.createElement('option');
+        opt.value = ch.id;
+        opt.innerText = `${ch.displayNumber}. ${ch.name}`;
+        if (ch.id === state.defaultChannelId) opt.selected = true;
+        defSelect.appendChild(opt);
+      });
+
+      renderChannels(state.channels);
+      showToast("Lineup synced with TV");
+    }
+
+    function renderChannels(list) {
+      const container = document.getElementById('channel-container');
+      container.innerHTML = '';
+
+      list.forEach((ch, idx) => {
+        const card = document.createElement('div');
+        card.className = 'channel-card';
+        card.innerHTML = `
+          <div class="channel-info">
+            <div class="channel-num-badge" onclick="openEditModal(${ch.id})">${ch.displayNumber}</div>
+            <div class="channel-text">
+              <div class="channel-name">${ch.name}</div>
+              <div class="channel-dth">DTH: ${ch.originalNumber}</div>
+            </div>
+          </div>
+          <div class="channel-actions">
+            <button class="icon-btn tune" onclick="tuneChannel(${ch.id})">📺 Tune</button>
+            <button class="icon-btn" title="Move Up" onclick="moveChannel(${idx}, -1)">▲</button>
+            <button class="icon-btn" title="Move Down" onclick="moveChannel(${idx}, 1)">▼</button>
+            <button class="icon-btn" title="Move to Top" onclick="moveToTop(${idx})">🔝</button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function filterChannels() {
+      const q = document.getElementById('search-input').value.toLowerCase().trim();
+      if (!q) {
+        renderChannels(state.channels);
+        return;
+      }
+      const filtered = state.channels.filter(ch => 
+        ch.name.toLowerCase().includes(q) || 
+        ch.displayNumber.includes(q) || 
+        ch.originalNumber.includes(q)
+      );
+      renderChannels(filtered);
+    }
+
+    async function moveChannel(index, delta) {
+      const targetIndex = index + delta;
+      if (targetIndex < 0 || targetIndex >= state.channels.length) return;
+
+      const item = state.channels.splice(index, 1)[0];
+      state.channels.splice(targetIndex, 0, item);
+
+      const orderedIds = state.channels.map(c => c.id);
+      renderChannels(state.channels);
+
+      const res = await apiRequest('/api/reorder', 'POST', { orderedChannelIds: orderedIds });
+      if (res && res.success) {
+        showToast("Reordered channel");
+        loadState();
+      }
+    }
+
+    async function moveToTop(index) {
+      if (index === 0) return;
+      const item = state.channels.splice(index, 1)[0];
+      state.channels.unshift(item);
+
+      const orderedIds = state.channels.map(c => c.id);
+      renderChannels(state.channels);
+
+      const res = await apiRequest('/api/reorder', 'POST', { orderedChannelIds: orderedIds });
+      if (res && res.success) {
+        showToast(`Moved ${item.name} to Top`);
+        loadState();
+      }
+    }
+
+    async function tuneChannel(id) {
+      const res = await apiRequest('/api/tune', 'POST', { channelId: id });
+      if (res && res.success) showToast("Tuned channel on TV");
+    }
+
+    async function updateCustomToggle() {
+      const val = document.getElementById('toggle-custom-numbers').checked;
+      await apiRequest('/api/config', 'POST', { customNumbersEnabled: val });
+      loadState();
+    }
+
+    async function updateStartupMode() {
+      const mode = document.getElementById('select-startup-mode').value;
+      await apiRequest('/api/config', 'POST', { startupMode: mode });
+      loadState();
+    }
+
+    async function updateDefaultChannel() {
+      const id = parseInt(document.getElementById('select-default-channel').value);
+      await apiRequest('/api/config', 'POST', { defaultChannelId: id });
+      showToast("Default channel saved");
+    }
+
+    async function autoRenumber() {
+      if (!confirm("Auto-renumber all channels linearly from 1 to N?")) return;
+      const orderedIds = state.channels.map(c => c.id);
+      const res = await apiRequest('/api/reorder', 'POST', { orderedChannelIds: orderedIds });
+      if (res && res.success) {
+        showToast("Renumbered 1..N");
+        loadState();
+      }
+    }
+
+    function openEditModal(channelId) {
+      editingChannelId = channelId;
+      const ch = state.channels.find(c => c.id === channelId);
+      if (!ch) return;
+
+      document.getElementById('modal-channel-name').innerText = ch.name;
+      document.getElementById('modal-dth-info').innerText = `Current Number: ${ch.displayNumber} (DTH: ${ch.originalNumber})`;
+      const numInput = document.getElementById('modal-input-number');
+      numInput.value = ch.displayNumber;
+      
+      const conflictDiv = document.getElementById('modal-conflict-warning');
+      conflictDiv.style.display = 'none';
+
+      numInput.oninput = () => {
+        const val = numInput.value.trim();
+        const conf = state.channels.find(c => c.displayNumber === val && c.id !== channelId);
+        if (conf) {
+          conflictDiv.innerText = `⚠ Used by ${conf.name}. Saving will swap numbers.`;
+          conflictDiv.style.display = 'block';
+        } else {
+          conflictDiv.style.display = 'none';
+        }
+      };
+
+      document.getElementById('edit-modal').style.display = 'flex';
+      setTimeout(() => numInput.focus(), 100);
+    }
+
+    function closeEditModal() {
+      document.getElementById('edit-modal').style.display = 'none';
+      editingChannelId = null;
+    }
+
+    async function saveModalNumber() {
+      const val = document.getElementById('modal-input-number').value.trim();
+      if (!val) return;
+      const res = await apiRequest('/api/number', 'POST', { channelId: editingChannelId, number: val });
+      if (res && res.success) {
+        showToast("Channel number updated");
+        closeEditModal();
+        loadState();
+      }
+    }
+
+    async function exportLineup() {
+      const data = await apiRequest('/api/export');
+      if (!data) return;
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `vividorbit_lineup_${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Lineup backup downloaded");
+    }
+
+    function triggerImport() {
+      document.getElementById('file-import').click();
+    }
+
+    async function handleFileImport(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const json = JSON.parse(text);
+        const res = await apiRequest('/api/import', 'POST', json);
+        if (res && res.success) {
+          showToast(`Restored ${res.matchedCount} channels from backup!`);
+          loadState();
+        }
+      } catch (err) {
+        showToast("⚠ Invalid backup JSON file");
+      }
+      e.target.value = '';
+    }
+
+    window.onload = loadState;
+  </script>
+</body>
+</html>

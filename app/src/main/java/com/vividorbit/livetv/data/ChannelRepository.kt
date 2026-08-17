@@ -12,6 +12,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
+enum class StartupMode(val key: String) {
+    LAST_WATCHED("last"),
+    FIXED_DEFAULT("fixed"),
+    FIRST_CHANNEL("first");
+
+    companion object {
+        fun fromKey(key: String?): StartupMode {
+            return values().find { it.key == key } ?: LAST_WATCHED
+        }
+    }
+}
+
 class ChannelRepository(private val context: Context) {
 
     companion object {
@@ -21,24 +33,93 @@ class ChannelRepository(private val context: Context) {
         private const val PREF_CUSTOM_NUMBERS_JSON = "custom_channel_numbers_json"
         private const val PREF_BACKUP_CUSTOM_NUMBERS_JSON = "backup_custom_channel_numbers_json"
         private const val PREF_PREFERRED_INPUT_ID = "preferred_tuner_input_id"
+        private const val PREF_STARTUP_MODE = "startup_mode"
+        private const val PREF_DEFAULT_CHANNEL_ID = "default_channel_id"
+        private const val PREF_LAST_CHANNEL_ID = "last_channel_id"
     }
 
     private val prefs: SharedPreferences by lazy {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
+    @Synchronized
     fun isCustomNumbersEnabled(): Boolean {
         return prefs.getBoolean(PREF_USE_CUSTOM_NUMBERS, false)
     }
 
+    @Synchronized
     fun setCustomNumbersEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(PREF_USE_CUSTOM_NUMBERS, enabled).apply()
     }
 
+    @Synchronized
+    fun getStartupMode(): StartupMode {
+        val key = prefs.getString(PREF_STARTUP_MODE, StartupMode.LAST_WATCHED.key)
+        return StartupMode.fromKey(key)
+    }
+
+    @Synchronized
+    fun setStartupMode(mode: StartupMode) {
+        prefs.edit().putString(PREF_STARTUP_MODE, mode.key).apply()
+    }
+
+    @Synchronized
+    fun getDefaultChannelId(): Long {
+        return prefs.getLong(PREF_DEFAULT_CHANNEL_ID, -1L)
+    }
+
+    @Synchronized
+    fun setDefaultChannelId(id: Long) {
+        prefs.edit().putLong(PREF_DEFAULT_CHANNEL_ID, id).apply()
+    }
+
+    @Synchronized
+    fun getLastChannelId(): Long {
+        return prefs.getLong(PREF_LAST_CHANNEL_ID, -1L)
+    }
+
+    @Synchronized
+    fun setLastChannelId(id: Long) {
+        prefs.edit().putLong(PREF_LAST_CHANNEL_ID, id).apply()
+    }
+
+    fun resolveStartupChannel(
+        channels: List<Channel>,
+        preserveCurrentChannel: Boolean = false,
+        currentChannel: Channel? = null
+    ): Channel? {
+        if (channels.isEmpty()) return null
+        if (preserveCurrentChannel && currentChannel != null) {
+            return channels.find { it.id == currentChannel.id } ?: channels[0]
+        }
+
+        val mode = getStartupMode()
+        val defaultId = getDefaultChannelId()
+        val lastId = getLastChannelId()
+
+        return when (mode) {
+            StartupMode.FIXED_DEFAULT -> {
+                channels.find { it.id == defaultId }
+                    ?: (if (lastId != -1L) channels.find { it.id == lastId } else null)
+                    ?: channels[0]
+            }
+            StartupMode.FIRST_CHANNEL -> {
+                channels[0]
+            }
+            StartupMode.LAST_WATCHED -> {
+                channels.find { it.id == lastId }
+                    ?: (if (defaultId != -1L) channels.find { it.id == defaultId } else null)
+                    ?: channels[0]
+            }
+        }
+    }
+
+    @Synchronized
     fun getPreferredInputId(): String? {
         return prefs.getString(PREF_PREFERRED_INPUT_ID, null)
     }
 
+    @Synchronized
     fun setPreferredInputId(inputId: String) {
         prefs.edit().putString(PREF_PREFERRED_INPUT_ID, inputId).apply()
     }
@@ -55,6 +136,7 @@ class ChannelRepository(private val context: Context) {
         }
     }
 
+    @Synchronized
     fun getCustomNumbersMap(): Map<Long, String> {
         var jsonStr = prefs.getString(PREF_CUSTOM_NUMBERS_JSON, null)
         if (jsonStr.isNullOrBlank()) {
@@ -79,6 +161,7 @@ class ChannelRepository(private val context: Context) {
         return result
     }
 
+    @Synchronized
     fun saveCustomNumbersMap(map: Map<Long, String>) {
         val json = JSONObject()
         for ((k, v) in map) {

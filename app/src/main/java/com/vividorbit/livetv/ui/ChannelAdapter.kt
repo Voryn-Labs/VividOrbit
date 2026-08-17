@@ -19,7 +19,8 @@ class ChannelAdapter(
     private var channels: List<Channel> = emptyList(),
     private val scope: CoroutineScope,
     private var currentChannelId: Long? = null,
-    private val onChannelClick: (Channel) -> Unit
+    private val onChannelClick: (Channel) -> Unit,
+    private val onChannelLongClick: ((Channel) -> Boolean)? = null
 ) : RecyclerView.Adapter<ChannelAdapter.ViewHolder>() {
 
     companion object {
@@ -44,7 +45,7 @@ class ChannelAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val channel = channels[position]
-        holder.bind(channel, channel.id == currentChannelId, onChannelClick)
+        holder.bind(channel, channel.id == currentChannelId, onChannelClick, onChannelLongClick)
     }
 
     override fun getItemCount(): Int = channels.size
@@ -86,7 +87,12 @@ class ChannelAdapter(
             itemView.isSelected = isSelected
         }
 
-        fun bind(channel: Channel, isCurrentlyPlaying: Boolean, onClick: (Channel) -> Unit) {
+        fun bind(
+            channel: Channel,
+            isCurrentlyPlaying: Boolean,
+            onClick: (Channel) -> Unit,
+            onLongClick: ((Channel) -> Boolean)?
+        ) {
             numberText.text = channel.displayNumber
             nameText.text = channel.displayName
             itemView.isSelected = isCurrentlyPlaying
@@ -110,6 +116,14 @@ class ChannelAdapter(
 
             itemView.setOnClickListener {
                 onClick(channel)
+            }
+
+            if (onLongClick != null) {
+                itemView.setOnLongClickListener {
+                    onLongClick(channel)
+                }
+            } else {
+                itemView.setOnLongClickListener(null)
             }
         }
     }
