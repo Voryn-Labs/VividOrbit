@@ -1,6 +1,6 @@
-package com.vividorbit.livetv
+package com.vorynlabs.vividorbit
 
-import com.vividorbit.livetv.data.Program
+import com.vorynlabs.vividorbit.data.Program
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

@@ -1,5 +1,6 @@
-package com.vividorbit.livetv
+package com.vorynlabs.vividorbit
 
+import com.vorynlabs.vividorbit.data.toggleFavoriteInSet
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -11,22 +12,12 @@ class FavoritesAndRecallTest {
     fun testFavoriteToggleLogic() {
         val favorites = mutableSetOf<Long>()
 
-        fun toggle(id: Long): Boolean {
-            return if (favorites.contains(id)) {
-                favorites.remove(id)
-                false
-            } else {
-                favorites.add(id)
-                true
-            }
-        }
-
-        assertTrue(toggle(101L))
+        assertTrue(toggleFavoriteInSet(favorites, 101L))
         assertTrue(favorites.contains(101L))
-        assertTrue(toggle(102L))
+        assertTrue(toggleFavoriteInSet(favorites, 102L))
         assertEquals(2, favorites.size)
 
-        assertFalse(toggle(101L))
+        assertFalse(toggleFavoriteInSet(favorites, 101L))
         assertFalse(favorites.contains(101L))
         assertEquals(1, favorites.size)
     }
