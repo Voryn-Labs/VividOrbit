@@ -29,7 +29,7 @@ reference point.
 1. `git checkout -b playstore-prep`.
 2. `./gradlew assembleDebug` — confirm it builds clean *before* touching anything.
 3. Install on the real Droidlogic STB. Record: cold-launch time, channel count,
-   time-to-first-frame, `adb shell dumpsys meminfo com.vividorbit.livetv`.
+   time-to-first-frame, `adb shell dumpsys meminfo com.vorynlabs.vividorbit`.
    These are your regression baselines — you will otherwise have no way to prove
    Phase 3 helped.
 4. Screen-record the current guide, settings, and zap behavior. You will change

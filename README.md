@@ -35,7 +35,7 @@
 * **Broadcaster Fallback**: Toggle back to original DTH numbers at any time without losing your custom map.
 
 ### 📱 3. Phone Configuration over QR Code (Local Web UI)
-* **Zero Cloud / 100% Offline**: Embedded multi-threaded HTTP server runs locally on the TV (port `8080`).
+* **Zero Cloud / 100% Offline**: Embedded multi-threaded HTTP server runs locally on the TV (port `10230`).
 * **Cryptographic Token Auth**: Dynamic 32-character session token verified with constant-time comparison prevents unauthorized LAN writes.
 * **Offline Detection**: Graceful UI detection when TV has no network connection with a one-click Retry option.
 * **Rich Mobile Web App (`assets/web/index.html`)**:
@@ -147,7 +147,7 @@ VividOrbit/
 
 ## 🌐 Phone Setup & REST API Reference
 
-When the user opens **📱 Phone Setup**, the TV displays a QR code containing `http://<TV_IP>:8080/?t=<SESSION_TOKEN>`. The local server supports the following endpoints:
+When the user opens **📱 Phone Setup**, the TV displays a QR code containing `http://<TV_IP>:10230/?t=<SESSION_TOKEN>`. The local server supports the following endpoints:
 
 | Method | Endpoint | Description | Payload Example |
 | :--- | :--- | :--- | :--- |
