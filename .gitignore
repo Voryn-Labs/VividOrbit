@@ -24,3 +24,6 @@ local.properties
 *.aab
 .omo/
 .codegraph
+
+# Local baseline snapshots
+_baseline_backups/
