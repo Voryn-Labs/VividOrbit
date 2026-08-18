@@ -1,4 +1,4 @@
-package com.vividorbit.livetv.data
+package com.vorynlabs.vividorbit.data
 
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -7,8 +7,7 @@ import java.util.Locale
 data class Program(
     val title: String,
     val startTimeUtcMillis: Long,
-    val endTimeUtcMillis: Long,
-    val description: String? = null
+    val endTimeUtcMillis: Long
 ) {
     companion object {
         private val timeFormat = ThreadLocal.withInitial {

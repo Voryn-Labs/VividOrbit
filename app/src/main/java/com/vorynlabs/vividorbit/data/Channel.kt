@@ -1,4 +1,4 @@
-package com.vividorbit.livetv.data
+package com.vorynlabs.vividorbit.data
 
 import android.net.Uri
 
@@ -9,5 +9,6 @@ data class Channel(
     val displayNumber: String,
     val displayName: String,
     val inputId: String,
-    val logoUri: Uri? = null
+    val logoUri: Uri? = null,
+    val genre: String = ""
 )

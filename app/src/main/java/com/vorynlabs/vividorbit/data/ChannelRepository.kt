@@ -1,4 +1,4 @@
-package com.vividorbit.livetv.data
+package com.vorynlabs.vividorbit.data
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -39,6 +39,13 @@ class ChannelRepository(private val context: Context) {
         private const val PREF_LAST_CHANNEL_ID = "last_channel_id"
         private const val PREF_PREVIOUS_CHANNEL_ID = "previous_channel_id"
         private const val PREF_FAVORITES_JSON = "favorites_channel_ids_json"
+        private const val PREF_CHANNELS_CACHE_JSON = "channels_cache_json"
+        private const val PREF_BANNER_HIDE_MS = "banner_hide_ms"
+        private const val PREF_GUIDE_AUTOHIDE_MS = "guide_autohide_ms"
+        private const val PREF_GUIDE_PROGRAM_TITLES = "guide_program_titles"
+        private const val PREF_HIDDEN_JSON = "hidden_channel_ids_json"
+        private val BANNER_HIDE_OPTIONS = longArrayOf(3000L, 6000L, 10000L)
+        private val GUIDE_HIDE_OPTIONS = longArrayOf(10000L, 20000L, 0L)
     }
 
     private val prefs: SharedPreferences by lazy {
@@ -46,6 +53,7 @@ class ChannelRepository(private val context: Context) {
     }
 
     private var cachedFavorites: Set<Long>? = null
+    private var cachedHidden: Set<Long>? = null
 
     @Synchronized
     fun isCustomNumbersEnabled(): Boolean {
@@ -99,6 +107,80 @@ class ChannelRepository(private val context: Context) {
     }
 
     @Synchronized
+    fun getBannerHideMs(): Long {
+        return prefs.getLong(PREF_BANNER_HIDE_MS, 6000L)
+    }
+
+    @Synchronized
+    fun cycleBannerHideMs(): Long {
+        val next = nextOption(getBannerHideMs(), BANNER_HIDE_OPTIONS)
+        prefs.edit().putLong(PREF_BANNER_HIDE_MS, next).apply()
+        return next
+    }
+
+    @Synchronized
+    fun getGuideAutoHideMs(): Long {
+        return prefs.getLong(PREF_GUIDE_AUTOHIDE_MS, 20000L)
+    }
+
+    @Synchronized
+    fun cycleGuideAutoHideMs(): Long {
+        val next = nextOption(getGuideAutoHideMs(), GUIDE_HIDE_OPTIONS)
+        prefs.edit().putLong(PREF_GUIDE_AUTOHIDE_MS, next).apply()
+        return next
+    }
+
+    @Synchronized
+    fun isGuideProgramTitlesEnabled(): Boolean {
+        return prefs.getBoolean(PREF_GUIDE_PROGRAM_TITLES, false)
+    }
+
+    @Synchronized
+    fun setGuideProgramTitlesEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(PREF_GUIDE_PROGRAM_TITLES, enabled).apply()
+    }
+
+    private fun nextOption(current: Long, options: LongArray): Long {
+        val index = options.indexOf(current)
+        return options[(index + 1).mod(options.size)]
+    }
+
+    @Synchronized
+    fun getHiddenIds(): Set<Long> {
+        val cached = cachedHidden
+        if (cached != null) return cached
+        val jsonStr = prefs.getString(PREF_HIDDEN_JSON, null)
+        if (jsonStr.isNullOrBlank()) {
+            cachedHidden = emptySet()
+            return emptySet()
+        }
+        val result = mutableSetOf<Long>()
+        try {
+            val array = JSONArray(jsonStr)
+            for (i in 0 until array.length()) {
+                result.add(array.getLong(i))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing hidden channels JSON: ${e.message}", e)
+        }
+        cachedHidden = result
+        return result
+    }
+
+    @Synchronized
+    fun isHidden(channelId: Long): Boolean = getHiddenIds().contains(channelId)
+
+    @Synchronized
+    fun setHidden(channelId: Long, hidden: Boolean) {
+        val ids = getHiddenIds().toMutableSet()
+        if (hidden) ids.add(channelId) else ids.remove(channelId)
+        cachedHidden = ids
+        val array = JSONArray()
+        ids.forEach { array.put(it) }
+        prefs.edit().putString(PREF_HIDDEN_JSON, array.toString()).apply()
+    }
+
+    @Synchronized
     fun getFavoriteIds(): Set<Long> {
         val cached = cachedFavorites
         if (cached != null) return cached
@@ -138,13 +220,7 @@ class ChannelRepository(private val context: Context) {
     @Synchronized
     fun toggleFavorite(channelId: Long): Boolean {
         val favs = getFavoriteIds().toMutableSet()
-        val isNowFav = if (favs.contains(channelId)) {
-            favs.remove(channelId)
-            false
-        } else {
-            favs.add(channelId)
-            true
-        }
+        val isNowFav = toggleFavoriteInSet(favs, channelId)
         setFavoriteIds(favs)
         return isNowFav
     }
@@ -159,25 +235,12 @@ class ChannelRepository(private val context: Context) {
             return channels.find { it.id == currentChannel.id } ?: channels[0]
         }
 
-        val mode = getStartupMode()
-        val defaultId = getDefaultChannelId()
-        val lastId = getLastChannelId()
-
-        return when (mode) {
-            StartupMode.FIXED_DEFAULT -> {
-                channels.find { it.id == defaultId }
-                    ?: (if (lastId != -1L) channels.find { it.id == lastId } else null)
-                    ?: channels[0]
-            }
-            StartupMode.FIRST_CHANNEL -> {
-                channels[0]
-            }
-            StartupMode.LAST_WATCHED -> {
-                channels.find { it.id == lastId }
-                    ?: (if (defaultId != -1L) channels.find { it.id == defaultId } else null)
-                    ?: channels[0]
-            }
-        }
+        return resolveStartupChannelLogic(
+            channels,
+            getStartupMode(),
+            getDefaultChannelId(),
+            getLastChannelId()
+        )
     }
 
     @Synchronized
@@ -276,6 +339,52 @@ class ChannelRepository(private val context: Context) {
         setCustomNumbersEnabled(false)
     }
 
+    fun getCachedChannels(): List<Channel> {
+        val jsonStr = prefs.getString(PREF_CHANNELS_CACHE_JSON, null) ?: return emptyList()
+        return try {
+            val array = JSONArray(jsonStr)
+            val list = mutableListOf<Channel>()
+            for (i in 0 until array.length()) {
+                val item = array.getJSONObject(i)
+                val logoUri = item.optString("logoUri").takeIf { it.isNotEmpty() }?.let { Uri.parse(it) }
+                list.add(
+                    Channel(
+                        id = item.getLong("id"),
+                        originalDisplayNumber = item.getString("originalNumber"),
+                        customDisplayNumber = item.optString("customNumber").takeIf { it.isNotEmpty() },
+                        displayNumber = item.getString("displayNumber"),
+                        displayName = item.getString("name"),
+                        inputId = item.getString("inputId"),
+                        logoUri = logoUri,
+                        genre = item.optString("genre", "")
+                    )
+                )
+            }
+            list
+        } catch (e: Exception) {
+            Log.e(TAG, "Error parsing channels cache: ${e.message}", e)
+            emptyList()
+        }
+    }
+
+    @Synchronized
+    fun saveChannelsCache(channels: List<Channel>) {
+        val array = JSONArray()
+        for (ch in channels) {
+            val item = JSONObject()
+            item.put("id", ch.id)
+            item.put("originalNumber", ch.originalDisplayNumber)
+            item.put("displayNumber", ch.displayNumber)
+            ch.customDisplayNumber?.let { item.put("customNumber", it) }
+            item.put("name", ch.displayName)
+            item.put("inputId", ch.inputId)
+            ch.logoUri?.toString()?.let { item.put("logoUri", it) }
+            item.put("genre", ch.genre)
+            array.put(item)
+        }
+        prefs.edit().putString(PREF_CHANNELS_CACHE_JSON, array.toString()).apply()
+    }
+
     private fun parseChannelsFromCursor(
         cursor: Cursor,
         defaultInputId: String,
@@ -285,6 +394,7 @@ class ChannelRepository(private val context: Context) {
         val numberIndex = cursor.getColumnIndex(TvContract.Channels.COLUMN_DISPLAY_NUMBER)
         val nameIndex = cursor.getColumnIndex(TvContract.Channels.COLUMN_DISPLAY_NAME)
         val inputIdIndex = cursor.getColumnIndex(TvContract.Channels.COLUMN_INPUT_ID)
+        val genreIndex = cursor.getColumnIndex(TvContract.Channels.COLUMN_BROADCAST_GENRE)
 
         while (cursor.moveToNext()) {
             val id = if (idIndex != -1) cursor.getLong(idIndex) else -1L
@@ -292,13 +402,14 @@ class ChannelRepository(private val context: Context) {
             var name = if (nameIndex != -1) cursor.getString(nameIndex) ?: "" else ""
             val resolvedInputId = if (inputIdIndex != -1) cursor.getString(inputIdIndex) ?: defaultInputId else defaultInputId
             val logoUri = TvContract.buildChannelLogoUri(id)
+            val broadcastGenre = if (genreIndex != -1) cursor.getString(genreIndex) ?: "" else ""
 
             if (name.isBlank()) {
                 name = if (number.isNotBlank()) "Channel $number" else "Channel $id"
             }
 
             if (id != -1L && channels.none { it.id == id }) {
-                channels.add(Channel(id, number, null, number, name, resolvedInputId, logoUri))
+                channels.add(Channel(id, number, null, number, name, resolvedInputId, logoUri, channelGenreLabel(broadcastGenre)))
             }
         }
     }
@@ -309,7 +420,8 @@ class ChannelRepository(private val context: Context) {
             TvContract.Channels._ID,
             TvContract.Channels.COLUMN_DISPLAY_NUMBER,
             TvContract.Channels.COLUMN_DISPLAY_NAME,
-            TvContract.Channels.COLUMN_INPUT_ID
+            TvContract.Channels.COLUMN_INPUT_ID,
+            TvContract.Channels.COLUMN_BROADCAST_GENRE
         )
 
         val tunerInputs = getAvailableTunerInputIds()
@@ -397,5 +509,72 @@ class ChannelRepository(private val context: Context) {
         }
 
         processedChannels
+    }
+}
+
+internal fun toggleFavoriteInSet(favorites: MutableSet<Long>, channelId: Long): Boolean {
+    return if (favorites.contains(channelId)) {
+        favorites.remove(channelId)
+        false
+    } else {
+        favorites.add(channelId)
+        true
+    }
+}
+
+private val CANONICAL_GENRE_LABELS = mapOf(
+    "animal/wildlife" to "Wildlife",
+    "arts" to "Arts",
+    "shopping" to "Shopping",
+    "comedy" to "Comedy",
+    "documentary" to "Documentary",
+    "education" to "Education",
+    "entertainment" to "Entertainment",
+    "family/kids" to "Kids",
+    "gaming" to "Gaming",
+    "lifestyle" to "Lifestyle",
+    "movies" to "Movies",
+    "music" to "Music",
+    "news" to "News",
+    "premium" to "Premium",
+    "religious" to "Religious",
+    "science/nature" to "Science",
+    "series" to "Series",
+    "sports" to "Sports",
+    "technology" to "Technology",
+    "travel" to "Travel"
+)
+
+internal fun channelGenreLabel(broadcastGenre: String?): String {
+    if (broadcastGenre.isNullOrBlank()) return ""
+    for (part in broadcastGenre.split(',')) {
+        val trimmed = part.trim().lowercase()
+        if (trimmed.isEmpty()) continue
+        CANONICAL_GENRE_LABELS[trimmed]?.let { return it }
+    }
+    return broadcastGenre.split(',')[0].trim().replaceFirstChar { it.uppercase() }
+}
+
+internal fun resolveStartupChannelLogic(
+    channels: List<Channel>,
+    mode: StartupMode,
+    defaultId: Long,
+    lastId: Long
+): Channel? {
+    if (channels.isEmpty()) return null
+    return when (mode) {
+        StartupMode.FIXED_DEFAULT -> {
+            channels.find { it.id == defaultId }
+                ?: (if (lastId != -1L) channels.find { it.id == lastId } else null)
+                ?: channels[0]
+        }
+        StartupMode.FIRST_CHANNEL -> {
+            channels[0]
+        }
+        StartupMode.LAST_WATCHED -> {
+            channels.find { it.id == lastId }
+                ?: (if (defaultId != -1L) channels.find { it.id == defaultId } else null)
+                ?: channels[0]
+        }
     }
 }

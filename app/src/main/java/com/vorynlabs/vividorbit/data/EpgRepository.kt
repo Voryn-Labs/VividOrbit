@@ -1,4 +1,4 @@
-package com.vividorbit.livetv.data
+package com.vorynlabs.vividorbit.data
 
 import android.content.Context
 import android.media.tv.TvContract
@@ -22,6 +22,7 @@ class EpgRepository(private val context: Context) {
     }
 
     private val cache = ConcurrentHashMap<Long, EpgResult>()
+    private val upcomingCache = ConcurrentHashMap<Long, Pair<Long, List<Program>>>()
 
     suspend fun getNowAndNext(channelId: Long): Pair<Program?, Program?> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
@@ -40,8 +41,7 @@ class EpgRepository(private val context: Context) {
             val projection = arrayOf(
                 TvContract.Programs.COLUMN_TITLE,
                 TvContract.Programs.COLUMN_START_TIME_UTC_MILLIS,
-                TvContract.Programs.COLUMN_END_TIME_UTC_MILLIS,
-                TvContract.Programs.COLUMN_SHORT_DESCRIPTION
+                TvContract.Programs.COLUMN_END_TIME_UTC_MILLIS
             )
 
             var current: Program? = null
@@ -57,17 +57,15 @@ class EpgRepository(private val context: Context) {
                 val titleIdx = cursor.getColumnIndex(TvContract.Programs.COLUMN_TITLE)
                 val startIdx = cursor.getColumnIndex(TvContract.Programs.COLUMN_START_TIME_UTC_MILLIS)
                 val endIdx = cursor.getColumnIndex(TvContract.Programs.COLUMN_END_TIME_UTC_MILLIS)
-                val descIdx = cursor.getColumnIndex(TvContract.Programs.COLUMN_SHORT_DESCRIPTION)
 
                 while (cursor.moveToNext()) {
                     val title = if (titleIdx != -1) cursor.getString(titleIdx) ?: "" else ""
                     val start = if (startIdx != -1) cursor.getLong(startIdx) else 0L
                     val end = if (endIdx != -1) cursor.getLong(endIdx) else 0L
-                    val desc = if (descIdx != -1) cursor.getString(descIdx) else null
 
                     if (title.isBlank()) continue
 
-                    val program = Program(title, start, end, desc)
+                    val program = Program(title, start, end)
                     if (now in start until end && current == null) {
                         current = program
                     } else if (start >= now && next == null) {
@@ -91,7 +89,57 @@ class EpgRepository(private val context: Context) {
         }
     }
 
+    suspend fun getUpcoming(channelId: Long, limit: Int = 5): List<Program> = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        upcomingCache[channelId]?.let { (cachedAt, list) ->
+            if (now - cachedAt < CACHE_TTL_MS) return@withContext list
+        }
+
+        val result = try {
+            val queryUri = TvContract.buildProgramsUriForChannel(
+                channelId,
+                now,
+                now + 8 * 60 * 60 * 1000L
+            )
+            val projection = arrayOf(
+                TvContract.Programs.COLUMN_TITLE,
+                TvContract.Programs.COLUMN_START_TIME_UTC_MILLIS,
+                TvContract.Programs.COLUMN_END_TIME_UTC_MILLIS
+            )
+            val upcoming = mutableListOf<Program>()
+            context.contentResolver.query(
+                queryUri,
+                projection,
+                null,
+                null,
+                "${TvContract.Programs.COLUMN_START_TIME_UTC_MILLIS} ASC"
+            )?.use { cursor ->
+                val titleIdx = cursor.getColumnIndex(TvContract.Programs.COLUMN_TITLE)
+                val startIdx = cursor.getColumnIndex(TvContract.Programs.COLUMN_START_TIME_UTC_MILLIS)
+                val endIdx = cursor.getColumnIndex(TvContract.Programs.COLUMN_END_TIME_UTC_MILLIS)
+
+                while (cursor.moveToNext() && upcoming.size < limit) {
+                    val title = if (titleIdx != -1) cursor.getString(titleIdx) ?: "" else ""
+                    val start = if (startIdx != -1) cursor.getLong(startIdx) else 0L
+                    val end = if (endIdx != -1) cursor.getLong(endIdx) else 0L
+                    if (title.isBlank() || end <= now) continue
+                    upcoming.add(Program(title, start, end))
+                }
+            }
+            upcoming
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Upcoming EPG query failed for channel $channelId: ${e.message}")
+            emptyList()
+        }
+
+        upcomingCache[channelId] = now to result
+        result
+    }
+
     fun clearCache() {
         cache.clear()
+        upcomingCache.clear()
     }
 }
