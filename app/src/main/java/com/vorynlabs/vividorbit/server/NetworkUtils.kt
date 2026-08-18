@@ -1,4 +1,4 @@
-package com.vividorbit.livetv.server
+package com.vorynlabs.vividorbit.server
 
 import android.content.Context
 import android.net.ConnectivityManager

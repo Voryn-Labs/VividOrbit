@@ -1,4 +1,4 @@
-package com.vividorbit.livetv.player
+package com.vorynlabs.vividorbit.player
 
 import android.media.tv.TvContentRating
 import android.media.tv.TvTrackInfo

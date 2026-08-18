@@ -1,17 +1,12 @@
-package com.vividorbit.livetv.server
+package com.vorynlabs.vividorbit.server
 
 import android.content.Context
 import android.util.Log
-import com.vividorbit.livetv.data.Channel
-import com.vividorbit.livetv.data.ChannelRepository
-import com.vividorbit.livetv.data.StartupMode
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
+import com.vorynlabs.vividorbit.data.Channel
+import com.vorynlabs.vividorbit.data.ChannelRepository
+import com.vorynlabs.vividorbit.data.StartupMode
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedInputStream
@@ -21,15 +16,20 @@ import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+
+internal fun isConstantTimeTokenValid(token: String, sessionToken: String): Boolean {
+    if (token.isEmpty() || sessionToken.isEmpty()) return false
+    return MessageDigest.isEqual(token.toByteArray(Charsets.UTF_8), sessionToken.toByteArray(Charsets.UTF_8))
+}
 
 class LocalConfigServer(
     private val context: Context,
     private val repository: ChannelRepository,
-    private val port: Int = 8080,
+    private val port: Int = 10230,
     private val sessionToken: String,
     private val onDataChanged: () -> Unit,
     private val onTuneRequested: (Long) -> Unit
@@ -45,7 +45,7 @@ class LocalConfigServer(
     private var serverSocket: ServerSocket? = null
     private val isRunning = AtomicBoolean(false)
     private var threadPool: ExecutorService? = null
-    private var serverScope: CoroutineScope? = null
+    private val activeSockets = ConcurrentHashMap.newKeySet<Socket>()
 
     fun start(bindAddress: String? = null): Boolean {
         if (isRunning.get()) return true
@@ -55,10 +55,6 @@ class LocalConfigServer(
             isRunning.set(true)
 
             threadPool = Executors.newFixedThreadPool(MAX_CONCURRENT_THREADS)
-            val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
-                Log.w(TAG, "Server background coroutine exception: ${throwable.message}")
-            }
-            serverScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + exceptionHandler)
 
             threadPool?.execute {
                 acceptLoop()
@@ -80,20 +76,23 @@ class LocalConfigServer(
         }
         serverSocket = null
 
-        try {
-            serverScope?.cancel()
-        } catch (e: Exception) {
-            // ignore
+        // Close in-flight client sockets so blocked handlers exit promptly
+        // instead of waiting up to SOCKET_TIMEOUT_MS on a read.
+        val sockets = activeSockets.toList()
+        activeSockets.clear()
+        sockets.forEach { socket ->
+            try {
+                socket.close()
+            } catch (e: Exception) {
+                // ignore
+            }
         }
-        serverScope = null
 
+        // Non-blocking: queued/in-flight handlers finish on their own.
         try {
             threadPool?.shutdown()
-            if (threadPool?.awaitTermination(500, TimeUnit.MILLISECONDS) == false) {
-                threadPool?.shutdownNow()
-            }
         } catch (e: Exception) {
-            threadPool?.shutdownNow()
+            // ignore
         }
         threadPool = null
     }
@@ -102,11 +101,14 @@ class LocalConfigServer(
         while (isRunning.get()) {
             try {
                 val client = serverSocket?.accept() ?: break
+                activeSockets.add(client)
                 threadPool?.execute {
                     try {
                         handleClient(client)
                     } catch (e: Exception) {
                         Log.d(TAG, "Client socket handled with error: ${e.message}")
+                    } finally {
+                        activeSockets.remove(client)
                     }
                 }
             } catch (e: Exception) {
@@ -192,28 +194,28 @@ class LocalConfigServer(
                 return
             }
 
-            if (!isTokenValid(providedToken)) {
+            if (!isConstantTimeTokenValid(providedToken, sessionToken)) {
                 sendJsonResponse(output, 401, JSONObject().put("error", "Unauthorized"))
                 return
             }
 
             when {
-                method == "GET" && path == "/api/state" -> handleGetState(output)
-                method == "POST" && path == "/api/number" -> handlePostNumber(output, body)
-                method == "POST" && path == "/api/reorder" -> handlePostReorder(output, body)
+                method == "GET" && path == "/api/state" ->
+                    runBlocking(Dispatchers.IO) { handleGetState(output) }
+                method == "POST" && path == "/api/number" ->
+                    runBlocking(Dispatchers.IO) { handlePostNumber(output, body) }
+                method == "POST" && path == "/api/reorder" ->
+                    runBlocking(Dispatchers.IO) { handlePostReorder(output, body) }
                 method == "POST" && path == "/api/favorite" -> handlePostFavorite(output, body)
                 method == "POST" && path == "/api/config" -> handlePostConfig(output, body)
                 method == "POST" && path == "/api/tune" -> handlePostTune(output, body)
-                method == "GET" && path == "/api/export" -> handleGetExport(output)
-                method == "POST" && path == "/api/import" -> handlePostImport(output, body)
+                method == "GET" && path == "/api/export" ->
+                    runBlocking(Dispatchers.IO) { handleGetExport(output) }
+                method == "POST" && path == "/api/import" ->
+                    runBlocking(Dispatchers.IO) { handlePostImport(output, body) }
                 else -> sendJsonResponse(output, 404, JSONObject().put("error", "Not Found"))
             }
         }
-    }
-
-    private fun isTokenValid(token: String): Boolean {
-        if (token.isEmpty() || sessionToken.isEmpty()) return false
-        return MessageDigest.isEqual(token.toByteArray(Charsets.UTF_8), sessionToken.toByteArray(Charsets.UTF_8))
     }
 
     private fun parseQueryParams(query: String): Map<String, String> {
@@ -250,35 +252,30 @@ class LocalConfigServer(
         }
     }
 
-    private fun handleGetState(output: OutputStream) {
-        val scope = serverScope ?: return
-        scope.launch {
-            val channels = repository.getChannels()
-            val favorites = repository.getFavoriteIds()
-            val json = JSONObject()
-            val array = JSONArray()
-            for (ch in channels) {
-                val item = JSONObject()
-                item.put("id", ch.id)
-                item.put("displayNumber", ch.displayNumber)
-                item.put("originalNumber", ch.originalDisplayNumber)
-                item.put("name", ch.displayName)
-                item.put("isFavorite", favorites.contains(ch.id))
-                array.put(item)
-            }
-            json.put("channels", array)
-            json.put("customNumbersEnabled", repository.isCustomNumbersEnabled())
-            json.put("startupMode", repository.getStartupMode().key)
-            json.put("defaultChannelId", repository.getDefaultChannelId())
-
-            val favArray = JSONArray()
-            favorites.forEach { favArray.put(it) }
-            json.put("favoriteIds", favArray)
-
-            withContext(Dispatchers.IO) {
-                sendJsonResponse(output, 200, json)
-            }
+    private suspend fun handleGetState(output: OutputStream) {
+        val channels = repository.getChannels()
+        val favorites = repository.getFavoriteIds()
+        val json = JSONObject()
+        val array = JSONArray()
+        for (ch in channels) {
+            val item = JSONObject()
+            item.put("id", ch.id)
+            item.put("displayNumber", ch.displayNumber)
+            item.put("originalNumber", ch.originalDisplayNumber)
+            item.put("name", ch.displayName)
+            item.put("isFavorite", favorites.contains(ch.id))
+            array.put(item)
         }
+        json.put("channels", array)
+        json.put("customNumbersEnabled", repository.isCustomNumbersEnabled())
+        json.put("startupMode", repository.getStartupMode().key)
+        json.put("defaultChannelId", repository.getDefaultChannelId())
+
+        val favArray = JSONArray()
+        favorites.forEach { favArray.put(it) }
+        json.put("favoriteIds", favArray)
+
+        sendJsonResponse(output, 200, json)
     }
 
     private fun handlePostFavorite(output: OutputStream, body: String) {
@@ -298,7 +295,7 @@ class LocalConfigServer(
         }
     }
 
-    private fun handlePostNumber(output: OutputStream, body: String) {
+    private suspend fun handlePostNumber(output: OutputStream, body: String) {
         try {
             val req = JSONObject(body)
             val channelId = req.getLong("channelId")
@@ -309,25 +306,20 @@ class LocalConfigServer(
                 return
             }
 
-            val scope = serverScope ?: return
-            scope.launch {
-                val swappedId = repository.assignChannelNumber(channelId, number)
-                repository.setCustomNumbersEnabled(true)
-                onDataChanged()
+            val swappedId = repository.assignChannelNumber(channelId, number)
+            repository.setCustomNumbersEnabled(true)
+            onDataChanged()
 
-                withContext(Dispatchers.IO) {
-                    val resp = JSONObject()
-                    resp.put("success", true)
-                    if (swappedId != null) resp.put("swappedChannelId", swappedId)
-                    sendJsonResponse(output, 200, resp)
-                }
-            }
+            val resp = JSONObject()
+            resp.put("success", true)
+            if (swappedId != null) resp.put("swappedChannelId", swappedId)
+            sendJsonResponse(output, 200, resp)
         } catch (e: Exception) {
             sendJsonResponse(output, 400, JSONObject().put("error", e.message ?: "Invalid JSON"))
         }
     }
 
-    private fun handlePostReorder(output: OutputStream, body: String) {
+    private suspend fun handlePostReorder(output: OutputStream, body: String) {
         try {
             val req = JSONObject(body)
             val orderedIds = req.getJSONArray("orderedChannelIds")
@@ -336,20 +328,15 @@ class LocalConfigServer(
                 idList.add(orderedIds.getLong(i))
             }
 
-            val scope = serverScope ?: return
-            scope.launch {
-                val newMap = mutableMapOf<Long, String>()
-                idList.forEachIndexed { index, id ->
-                    newMap[id] = (index + 1).toString()
-                }
-                repository.saveCustomNumbersMap(newMap)
-                repository.setCustomNumbersEnabled(true)
-                onDataChanged()
-
-                withContext(Dispatchers.IO) {
-                    sendJsonResponse(output, 200, JSONObject().put("success", true))
-                }
+            val newMap = mutableMapOf<Long, String>()
+            idList.forEachIndexed { index, id ->
+                newMap[id] = (index + 1).toString()
             }
+            repository.saveCustomNumbersMap(newMap)
+            repository.setCustomNumbersEnabled(true)
+            onDataChanged()
+
+            sendJsonResponse(output, 200, JSONObject().put("success", true))
         } catch (e: Exception) {
             sendJsonResponse(output, 400, JSONObject().put("error", e.message ?: "Invalid JSON"))
         }
@@ -387,59 +374,49 @@ class LocalConfigServer(
         }
     }
 
-    private fun handleGetExport(output: OutputStream) {
-        val scope = serverScope ?: return
-        scope.launch {
-            val channels = repository.getChannels()
-            val array = JSONArray()
-            for (ch in channels) {
-                val item = JSONObject()
-                item.put("name", ch.displayName)
-                item.put("customNumber", ch.displayNumber)
-                item.put("originalNumber", ch.originalDisplayNumber)
-                array.put(item)
-            }
-            withContext(Dispatchers.IO) {
-                sendJsonResponse(output, 200, array)
-            }
+    private suspend fun handleGetExport(output: OutputStream) {
+        val channels = repository.getChannels()
+        val array = JSONArray()
+        for (ch in channels) {
+            val item = JSONObject()
+            item.put("name", ch.displayName)
+            item.put("customNumber", ch.displayNumber)
+            item.put("originalNumber", ch.originalDisplayNumber)
+            array.put(item)
         }
+        sendJsonResponse(output, 200, array)
     }
 
-    private fun handlePostImport(output: OutputStream, body: String) {
+    private suspend fun handlePostImport(output: OutputStream, body: String) {
         try {
             val array = JSONArray(body)
-            val scope = serverScope ?: return
-            scope.launch {
-                val currentChannels = repository.getChannels()
-                val newMap = mutableMapOf<Long, String>()
-                var matched = 0
+            val currentChannels = repository.getChannels()
+            val newMap = mutableMapOf<Long, String>()
+            var matched = 0
 
-                for (i in 0 until array.length()) {
-                    val item = array.getJSONObject(i)
-                    val name = item.optString("name")
-                    val customNum = item.optString("customNumber").trim()
-                    if (name.isNotBlank() && customNum.matches(Regex("^[0-9]{1,4}$"))) {
-                        val match = currentChannels.find { it.displayName.equals(name, ignoreCase = true) }
-                        if (match != null) {
-                            newMap[match.id] = customNum
-                            matched++
-                        }
+            for (i in 0 until array.length()) {
+                val item = array.getJSONObject(i)
+                val name = item.optString("name")
+                val customNum = item.optString("customNumber").trim()
+                if (name.isNotBlank() && customNum.matches(Regex("^[0-9]{1,4}$"))) {
+                    val match = currentChannels.find { it.displayName.equals(name, ignoreCase = true) }
+                    if (match != null) {
+                        newMap[match.id] = customNum
+                        matched++
                     }
                 }
-
-                if (newMap.isNotEmpty()) {
-                    repository.saveCustomNumbersMap(newMap)
-                    repository.setCustomNumbersEnabled(true)
-                    onDataChanged()
-                }
-
-                withContext(Dispatchers.IO) {
-                    val resp = JSONObject()
-                    resp.put("success", true)
-                    resp.put("matchedCount", matched)
-                    sendJsonResponse(output, 200, resp)
-                }
             }
+
+            if (newMap.isNotEmpty()) {
+                repository.saveCustomNumbersMap(newMap)
+                repository.setCustomNumbersEnabled(true)
+                onDataChanged()
+            }
+
+            val resp = JSONObject()
+            resp.put("success", true)
+            resp.put("matchedCount", matched)
+            sendJsonResponse(output, 200, resp)
         } catch (e: Exception) {
             sendJsonResponse(output, 400, JSONObject().put("error", e.message ?: "Invalid JSON"))
         }

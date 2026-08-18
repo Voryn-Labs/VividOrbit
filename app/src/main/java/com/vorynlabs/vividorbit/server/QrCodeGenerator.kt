@@ -1,4 +1,4 @@
-package com.vividorbit.livetv.server
+package com.vorynlabs.vividorbit.server
 
 import android.graphics.Bitmap
 import android.graphics.Color
