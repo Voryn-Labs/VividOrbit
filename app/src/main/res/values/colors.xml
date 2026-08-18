@@ -1,17 +1,24 @@
 <resources>
-    <color name="bg_dark">#0B0B0C</color>
-    <color name="panel_bg">#161618</color>
-    <color name="panel_bg_elevated">#1D1D20</color>
-    <color name="hairline">#29292C</color>
+    <color name="bg_dark">#0A0C10</color>
+    <color name="panel_bg">#12151C</color>
+    <color name="panel_bg_elevated">#181C25</color>
+    <color name="panel_bg_glass">#E612151C</color>
+    <color name="panel_bg_glass_deep">#F20E1116</color>
+    <color name="hairline">#2B3140</color>
+    <color name="scrim">#B30A0C10</color>
 
-    <color name="text_primary">#F2F2F3</color>
-    <color name="text_secondary">#8A8A8E</color>
-    <color name="text_tertiary">#5B5B5F</color>
+    <color name="text_primary">#F5F7FA</color>
+    <color name="text_secondary">#A8B0BD</color>
+    <color name="text_tertiary">#6D7582</color>
 
-    <color name="row_selected_bg">#1B1B1E</color>
-    <color name="row_focus_bg">#26262A</color>
+    <color name="row_selected_bg">#161B24</color>
+    <color name="row_focus_bg">#1C2430</color>
+    <color name="accent">#2DD4BF</color>
+    <color name="accent_soft">#14352F</color>
+    <color name="accent_dim">#5EEAD4</color>
 
-    <color name="live_red">#E5484D</color>
-    <color name="toggle_on_green">#30A46C</color>
-    <color name="badge_dth_bg">#222226</color>
+    <color name="live_red">#F87171</color>
+    <color name="toggle_on_green">#34D399</color>
+    <color name="badge_dth_bg">#121A22</color>
+    <color name="star_gold">#FBBF24</color>
 </resources>
