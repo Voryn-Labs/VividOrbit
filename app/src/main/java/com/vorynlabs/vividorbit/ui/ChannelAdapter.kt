@@ -1,4 +1,4 @@
-package com.vividorbit.livetv.ui
+package com.vorynlabs.vividorbit.ui
 
 import android.view.LayoutInflater
 import android.view.View
@@ -7,9 +7,9 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
-import com.vividorbit.livetv.R
-import com.vividorbit.livetv.data.Channel
-import com.vividorbit.livetv.data.EpgRepository
+import com.vorynlabs.vividorbit.R
+import com.vorynlabs.vividorbit.data.Channel
+import com.vorynlabs.vividorbit.data.EpgRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -23,8 +23,11 @@ class ChannelAdapter(
     private val epgRepository: EpgRepository? = null,
     private var isFavoriteChecker: ((Long) -> Boolean)? = null,
     private val onChannelClick: (Channel) -> Unit,
-    private val onChannelLongClick: ((Channel) -> Boolean)? = null
+    private val onChannelLongClick: ((Channel) -> Boolean)? = null,
+    private val showProgramTitles: () -> Boolean = { false }
 ) : RecyclerView.Adapter<ChannelAdapter.ViewHolder>() {
+
+    fun channelAt(position: Int): Channel? = channels.getOrNull(position)
 
     companion object {
         const val PAYLOAD_SELECTION = "payload_selection"
@@ -96,7 +99,7 @@ class ChannelAdapter(
         }
     }
 
-    class ViewHolder(
+    inner class ViewHolder(
         itemView: View,
         private val scope: CoroutineScope,
         private val epgRepository: EpgRepository?
@@ -147,24 +150,11 @@ class ChannelAdapter(
             )
 
             imageJob?.cancel()
-            val cachedBitmap = ChannelLogoLoader.getCached(channel.id)
-            if (cachedBitmap != null) {
-                logoImage.setImageBitmap(cachedBitmap)
-            } else {
-                logoImage.setImageResource(android.R.drawable.ic_menu_slideshow)
-                imageJob = scope.launch(Dispatchers.IO) {
-                    val bitmap = ChannelLogoLoader.loadAndCache(itemView.context, channel.id, channel.logoUri)
-                    if (bitmap != null) {
-                        withContext(Dispatchers.Main) {
-                            logoImage.setImageBitmap(bitmap)
-                        }
-                    }
-                }
-            }
+            imageJob = ChannelLogoLoader.bind(logoImage, scope, channel.id, channel.logoUri)
 
             epgJob?.cancel()
             programText.visibility = View.GONE
-            if (epgRepository != null) {
+            if (epgRepository != null && this@ChannelAdapter.showProgramTitles()) {
                 epgJob = scope.launch(Dispatchers.IO) {
                     val (nowProgram, _) = epgRepository.getNowAndNext(channel.id)
                     withContext(Dispatchers.Main) {

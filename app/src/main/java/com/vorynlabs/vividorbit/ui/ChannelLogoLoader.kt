@@ -1,15 +1,23 @@
-package com.vividorbit.livetv.ui
+package com.vorynlabs.vividorbit.ui
 
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.tv.TvContract
 import android.net.Uri
 import android.util.LruCache
+import android.view.View
+import android.widget.ImageView
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 
 object ChannelLogoLoader {
 
-    private const val NEGATIVE_CACHE_TTL_MS = 5 * 60 * 1000L // 5 minutes
+    private const val NEGATIVE_CACHE_TTL_MS = 5 * 60 * 1000L
     private val maxMemoryKb = (Runtime.getRuntime().maxMemory() / 1024).toInt()
     private val cacheSizeKb = maxMemoryKb / 8
     private val cache = object : LruCache<Long, Bitmap>(cacheSizeKb) {
@@ -24,8 +32,33 @@ object ChannelLogoLoader {
         missesWithTimestamp.clear()
     }
 
+    fun bind(
+        imageView: ImageView,
+        scope: CoroutineScope,
+        channelId: Long,
+        logoUri: Uri?
+    ): Job? {
+        imageView.tag = channelId
+        val cached = cache.get(channelId)
+        if (cached != null) {
+            imageView.setImageBitmap(cached)
+            imageView.visibility = View.VISIBLE
+            return null
+        }
+        imageView.setImageDrawable(null)
+        imageView.visibility = View.GONE
+        return scope.launch(Dispatchers.IO) {
+            val bitmap = loadAndCache(imageView.context, channelId, logoUri)
+            withContext(Dispatchers.Main) {
+                if (bitmap != null && imageView.tag == channelId) {
+                    imageView.setImageBitmap(bitmap)
+                    imageView.visibility = View.VISIBLE
+                }
+            }
+        }
+    }
+
     fun loadAndCache(context: Context, channelId: Long, logoUri: Uri?, reqSize: Int = 200): Bitmap? {
-        if (logoUri == null) return null
         cache.get(channelId)?.let { return it }
 
         val now = System.currentTimeMillis()
@@ -34,40 +67,66 @@ object ChannelLogoLoader {
             return null
         }
 
+        val candidates = LinkedHashSet<Uri>()
+        if (logoUri != null) candidates.add(logoUri)
+        if (channelId != -1L) candidates.add(TvContract.buildChannelLogoUri(channelId))
+
+        for (uri in candidates) {
+            val decoded = decodeLogo(context, uri, reqSize)
+            if (decoded != null) {
+                cache.put(channelId, decoded)
+                missesWithTimestamp.remove(channelId)
+                return decoded
+            }
+        }
+
+        missesWithTimestamp[channelId] = now
+        return null
+    }
+
+    private fun decodeLogo(context: Context, uri: Uri, reqSize: Int): Bitmap? {
+        val sample = sampleSizeFor(context, uri, reqSize)
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+        try {
+            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { afd ->
+                val bitmap = BitmapFactory.decodeFileDescriptor(afd.fileDescriptor, null, options)
+                if (bitmap != null) return bitmap
+            }
+        } catch (_: Exception) {
+        }
         return try {
-            var inSampleSize = 1
-            context.contentResolver.openInputStream(logoUri)?.use { input ->
-                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use { input ->
                 BitmapFactory.decodeStream(input, null, options)
-                val height = options.outHeight
-                val width = options.outWidth
-                if (height > reqSize || width > reqSize) {
-                    val halfHeight = height / 2
-                    val halfWidth = width / 2
-                    while (halfHeight / inSampleSize >= reqSize && halfWidth / inSampleSize >= reqSize) {
-                        inSampleSize *= 2
-                    }
-                }
             }
-
-            val decodedBitmap = context.contentResolver.openInputStream(logoUri)?.use { input ->
-                val options = BitmapFactory.Options().apply {
-                    this.inSampleSize = inSampleSize
-                    inPreferredConfig = Bitmap.Config.RGB_565
-                }
-                BitmapFactory.decodeStream(input, null, options)?.also { bitmap ->
-                    cache.put(channelId, bitmap)
-                    missesWithTimestamp.remove(channelId)
-                }
-            }
-
-            if (decodedBitmap == null) {
-                missesWithTimestamp[channelId] = now
-            }
-            decodedBitmap
-        } catch (e: Exception) {
-            missesWithTimestamp[channelId] = now
+        } catch (_: Exception) {
             null
         }
+    }
+
+    private fun sampleSizeFor(context: Context, uri: Uri, reqSize: Int): Int {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        try {
+            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { afd ->
+                BitmapFactory.decodeFileDescriptor(afd.fileDescriptor, null, bounds)
+            }
+        } catch (_: Exception) {
+            try {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    BitmapFactory.decodeStream(input, null, bounds)
+                }
+            } catch (_: Exception) {
+                return 1
+            }
+        }
+        var sample = 1
+        var halfH = bounds.outHeight / 2
+        var halfW = bounds.outWidth / 2
+        while (halfH / sample >= reqSize && halfW / sample >= reqSize) {
+            sample *= 2
+        }
+        return sample
     }
 }

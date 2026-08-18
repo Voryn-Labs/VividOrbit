@@ -1,4 +1,4 @@
-package com.vividorbit.livetv.ui
+package com.vorynlabs.vividorbit.ui
 
 import android.view.LayoutInflater
 import android.view.View
@@ -7,8 +7,8 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
-import com.vividorbit.livetv.R
-import com.vividorbit.livetv.data.Channel
+import com.vorynlabs.vividorbit.R
+import com.vorynlabs.vividorbit.data.Channel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
 class ChannelSettingsAdapter(
     private var channels: List<Channel> = emptyList(),
     private val scope: CoroutineScope,
+    private val isHiddenChecker: ((Long) -> Boolean)? = null,
     private val onChannelClick: (Channel) -> Unit,
     private val onChannelLongClick: ((Channel) -> Boolean)? = null
 ) : RecyclerView.Adapter<ChannelSettingsAdapter.ViewHolder>() {
@@ -53,7 +54,7 @@ class ChannelSettingsAdapter(
         }
     }
 
-    class ViewHolder(itemView: View, private val scope: CoroutineScope) : RecyclerView.ViewHolder(itemView) {
+    inner class ViewHolder(itemView: View, private val scope: CoroutineScope) : RecyclerView.ViewHolder(itemView) {
         private val customNumberText: TextView = itemView.findViewById(R.id.settings_custom_number)
         private val logoImage: ImageView = itemView.findViewById(R.id.settings_channel_logo)
         private val nameText: TextView = itemView.findViewById(R.id.settings_channel_name)
@@ -76,24 +77,14 @@ class ChannelSettingsAdapter(
         ) {
             customNumberText.text = channel.displayNumber
             nameText.text = channel.displayName
-            dthNumberText.text = itemView.context.getString(R.string.dth_format, channel.originalDisplayNumber)
+            dthNumberText.text = if (isHiddenChecker?.invoke(channel.id) == true) {
+                "Hidden · OK to restore"
+            } else {
+                itemView.context.getString(R.string.dth_format, channel.originalDisplayNumber)
+            }
 
             imageJob?.cancel()
-
-            val cachedBitmap = ChannelLogoLoader.getCached(channel.id)
-            if (cachedBitmap != null) {
-                logoImage.setImageBitmap(cachedBitmap)
-            } else {
-                logoImage.setImageResource(android.R.drawable.ic_menu_slideshow)
-                imageJob = scope.launch(Dispatchers.IO) {
-                    val bitmap = ChannelLogoLoader.loadAndCache(itemView.context, channel.id, channel.logoUri)
-                    if (bitmap != null) {
-                        withContext(Dispatchers.Main) {
-                            logoImage.setImageBitmap(bitmap)
-                        }
-                    }
-                }
-            }
+            imageJob = ChannelLogoLoader.bind(logoImage, scope, channel.id, channel.logoUri)
 
             itemView.setOnClickListener {
                 onClick(channel)

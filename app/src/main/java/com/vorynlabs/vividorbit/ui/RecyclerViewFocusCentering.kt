@@ -1,4 +1,4 @@
-package com.vividorbit.livetv.ui
+package com.vorynlabs.vividorbit.ui
 
 import android.view.View
 import androidx.recyclerview.widget.RecyclerView
@@ -13,7 +13,7 @@ fun View.centerInParentOnFocus() {
         val recyclerCenter = recyclerView.height / 2
         val delta = itemCenter - recyclerCenter
         if (Math.abs(delta) > view.height / 2) {
-            recyclerView.smoothScrollBy(0, delta)
+            recyclerView.scrollBy(0, delta)
         }
     }
 }

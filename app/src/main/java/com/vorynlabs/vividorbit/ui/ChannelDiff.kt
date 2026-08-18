@@ -1,7 +1,7 @@
-package com.vividorbit.livetv.ui
+package com.vorynlabs.vividorbit.ui
 
 import androidx.recyclerview.widget.DiffUtil
-import com.vividorbit.livetv.data.Channel
+import com.vorynlabs.vividorbit.data.Channel
 
 fun channelDiff(oldList: List<Channel>, newList: List<Channel>): DiffUtil.Callback {
     return object : DiffUtil.Callback() {
