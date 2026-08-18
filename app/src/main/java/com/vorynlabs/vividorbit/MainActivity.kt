@@ -1,13 +1,16 @@
-package com.vividorbit.livetv
+package com.vorynlabs.vividorbit
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.ComponentCallbacks2
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.media.tv.TvContract
 import android.media.tv.TvInputManager
 import android.media.tv.TvView
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -16,23 +19,24 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.cardview.widget.CardView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.vividorbit.livetv.data.Channel
-import com.vividorbit.livetv.data.ChannelRepository
-import com.vividorbit.livetv.data.EpgRepository
-import com.vividorbit.livetv.data.StartupMode
-import com.vividorbit.livetv.player.TvViewHelper
-import com.vividorbit.livetv.server.LocalConfigServer
-import com.vividorbit.livetv.server.NetworkUtils
-import com.vividorbit.livetv.server.QrCodeGenerator
-import com.vividorbit.livetv.ui.ChannelAdapter
-import com.vividorbit.livetv.ui.ChannelLogoLoader
-import com.vividorbit.livetv.ui.ChannelSettingsAdapter
+import com.vorynlabs.vividorbit.data.Channel
+import com.vorynlabs.vividorbit.data.ChannelRepository
+import com.vorynlabs.vividorbit.data.EpgRepository
+import com.vorynlabs.vividorbit.data.StartupMode
+import com.vorynlabs.vividorbit.player.TvViewHelper
+import com.vorynlabs.vividorbit.server.LocalConfigServer
+import com.vorynlabs.vividorbit.server.NetworkUtils
+import com.vorynlabs.vividorbit.server.QrCodeGenerator
+import com.vorynlabs.vividorbit.ui.ChannelAdapter
+import com.vorynlabs.vividorbit.ui.ChannelLogoLoader
+import com.vorynlabs.vividorbit.ui.ChannelSettingsAdapter
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -65,6 +69,7 @@ class MainActivity : Activity(), CoroutineScope {
     private lateinit var sidebarSettingsBtn: TextView
     private lateinit var sidebarTabAll: TextView
     private lateinit var sidebarTabFavs: TextView
+    private lateinit var genreList: LinearLayout
     private lateinit var channelRecyclerView: RecyclerView
     private lateinit var numericEntryCard: CardView
     private lateinit var numericEntryText: TextView
@@ -77,6 +82,15 @@ class MainActivity : Activity(), CoroutineScope {
     private lateinit var settingsStartupRow: View
     private lateinit var settingsStartupSubtitle: TextView
     private lateinit var settingsPhoneSetupRow: View
+    private lateinit var settingsAboutRow: View
+    private lateinit var settingsBannerRow: View
+    private lateinit var settingsBannerSubtitle: TextView
+    private lateinit var settingsGuideHideRow: View
+    private lateinit var settingsGuideHideSubtitle: TextView
+    private lateinit var settingsHideRow: View
+    private lateinit var settingsHideSubtitle: TextView
+    private lateinit var settingsGuideEpgRow: View
+    private lateinit var settingsGuideEpgBadge: TextView
     private lateinit var settingsAutoRenumberBtn: TextView
     private lateinit var settingsResetDthBtn: TextView
     private lateinit var settingsRecyclerView: RecyclerView
@@ -119,7 +133,7 @@ class MainActivity : Activity(), CoroutineScope {
     private var localConfigServer: LocalConfigServer? = null
     private var currentSessionToken: String = ""
 
-    private lateinit var channelBannerCard: CardView
+    private lateinit var channelBannerCard: View
     private lateinit var bannerChannelNumber: TextView
     private lateinit var bannerChannelLogo: ImageView
     private lateinit var bannerChannelName: TextView
@@ -129,11 +143,20 @@ class MainActivity : Activity(), CoroutineScope {
     private lateinit var bannerProgramProgress: ProgressBar
     private lateinit var bannerNextProgram: TextView
 
+    private lateinit var channelProgramsCard: CardView
+    private lateinit var programsTitle: TextView
+    private lateinit var programsSubtitle: TextView
+    private lateinit var programsContainer: LinearLayout
+
     private val bannerHandler = Handler(Looper.getMainLooper())
+    private var pendingBannerChannel: Channel? = null
     private val hideBannerRunnable = Runnable {
         if (::channelBannerCard.isInitialized) {
             channelBannerCard.visibility = View.GONE
         }
+    }
+    private val fetchBannerEpgRunnable = Runnable {
+        pendingBannerChannel?.let { fetchBannerEpg(it) }
     }
 
     private lateinit var mediaSession: MediaSession
@@ -153,6 +176,9 @@ class MainActivity : Activity(), CoroutineScope {
             progressBar.visibility = View.GONE
         }
     }
+    private val stuckTuningRunnable = Runnable {
+        showChannelUnavailable()
+    }
 
     private var pendingZapChannel: Channel? = null
     private val zapHandler = Handler(Looper.getMainLooper())
@@ -164,8 +190,13 @@ class MainActivity : Activity(), CoroutineScope {
 
     private var allChannels: List<Channel> = emptyList()
     private var selectedChannel: Channel? = null
+    private var previewChannel: Channel? = null
     private var previousChannelId: Long? = null
     private var isFavoritesFilterActive = false
+    private var activeGenre: String? = null
+    private var activeProgramsChannel: Channel? = null
+    private var guideLevel = 1
+    private var backLongPressHandled = false
 
     private var numericBuffer = ""
     private val numericHandler = Handler(Looper.getMainLooper())
@@ -182,7 +213,9 @@ class MainActivity : Activity(), CoroutineScope {
         private const val PRIMARY_PERMISSION = "android.permission.READ_TV_LISTINGS"
         private const val OPTIONAL_EPG_PERMISSION = "com.android.providers.tv.permission.READ_EPG_DATA"
         private const val PERMISSION_REQUEST_CODE = 1010
-        private const val ZAP_DEBOUNCE_MS = 120L
+        private const val ZAP_DEBOUNCE_MS = 80L
+        private const val EPG_FETCH_DEBOUNCE_MS = 300L
+        private const val ABOUT_US_URL = "https://voryn-labs.github.io/vorynlabs-games/"
 
         private const val SIDEBAR_AUTO_HIDE_MS = 20000L
         private const val BANNER_AUTO_HIDE_MS = 6000L
@@ -192,6 +225,8 @@ class MainActivity : Activity(), CoroutineScope {
         private const val TUNING_SHOW_DELAY_MS = 500L
         private const val TUNING_FALLBACK_TIMEOUT_MS = 8000L
         private const val SUSTAINED_BUFFERING_THRESHOLD_MS = 3000L
+        private const val GENRE_ALL = "All"
+        private const val GENRE_GENERAL = "General"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -211,6 +246,7 @@ class MainActivity : Activity(), CoroutineScope {
         sidebarSettingsBtn = findViewById(R.id.sidebar_settings_btn)
         sidebarTabAll = findViewById(R.id.sidebar_tab_all)
         sidebarTabFavs = findViewById(R.id.sidebar_tab_favs)
+        genreList = findViewById(R.id.genre_list)
         channelRecyclerView = findViewById(R.id.channel_recycler_view)
         numericEntryCard = findViewById(R.id.numeric_entry_card)
         numericEntryText = findViewById(R.id.numeric_entry_text)
@@ -223,6 +259,15 @@ class MainActivity : Activity(), CoroutineScope {
         settingsStartupRow = findViewById(R.id.settings_startup_row)
         settingsStartupSubtitle = findViewById(R.id.settings_startup_subtitle)
         settingsPhoneSetupRow = findViewById(R.id.settings_phone_setup_row)
+        settingsAboutRow = findViewById(R.id.settings_about_row)
+        settingsBannerRow = findViewById(R.id.settings_banner_row)
+        settingsBannerSubtitle = findViewById(R.id.settings_banner_subtitle)
+        settingsGuideHideRow = findViewById(R.id.settings_guide_hide_row)
+        settingsGuideHideSubtitle = findViewById(R.id.settings_guide_hide_subtitle)
+        settingsHideRow = findViewById(R.id.settings_hide_row)
+        settingsHideSubtitle = findViewById(R.id.settings_hide_subtitle)
+        settingsGuideEpgRow = findViewById(R.id.settings_guide_epg_row)
+        settingsGuideEpgBadge = findViewById(R.id.settings_guide_epg_badge)
         settingsAutoRenumberBtn = findViewById(R.id.settings_auto_renumber_btn)
         settingsResetDthBtn = findViewById(R.id.settings_reset_dth_btn)
         settingsRecyclerView = findViewById(R.id.settings_recycler_view)
@@ -265,6 +310,11 @@ class MainActivity : Activity(), CoroutineScope {
         bannerProgramProgress = findViewById(R.id.banner_program_progress)
         bannerNextProgram = findViewById(R.id.banner_next_program)
 
+        channelProgramsCard = findViewById(R.id.channel_programs_card)
+        programsTitle = findViewById(R.id.programs_title)
+        programsSubtitle = findViewById(R.id.programs_subtitle)
+        programsContainer = findViewById(R.id.programs_container)
+
         repository = ChannelRepository(this)
         epgRepository = EpgRepository(this)
         previousChannelId = repository.getPreviousChannelId().takeIf { it != -1L }
@@ -277,6 +327,7 @@ class MainActivity : Activity(), CoroutineScope {
             closeSettings()
         }
 
+        sidebarTabAll.isSelected = true
         sidebarTabAll.setOnClickListener {
             setFavoritesFilter(false)
         }
@@ -295,6 +346,42 @@ class MainActivity : Activity(), CoroutineScope {
 
         settingsPhoneSetupRow.setOnClickListener {
             openPhoneSetup()
+        }
+
+        settingsAboutRow.setOnClickListener {
+            openAboutUs()
+        }
+
+        settingsBannerRow.setOnClickListener {
+            repository.cycleBannerHideMs()
+            updateSettingsToggleUi()
+        }
+
+        settingsGuideHideRow.setOnClickListener {
+            repository.cycleGuideAutoHideMs()
+            updateSettingsToggleUi()
+            resetSidebarTimer()
+        }
+
+        settingsHideRow.setOnClickListener {
+            val channel = selectedChannel
+            if (channel == null) {
+                Toast.makeText(this, R.string.settings_hide_none, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            repository.setHidden(channel.id, true)
+            refreshDisplayedChannels()
+            channelSettingsAdapter.updateChannels(allChannels)
+            updateSettingsToggleUi()
+            val next = zapChannels().firstOrNull { it.id != channel.id }
+            if (next != null) tuneToChannel(next)
+            Toast.makeText(this, "Hidden ${channel.displayName}", Toast.LENGTH_SHORT).show()
+        }
+
+        settingsGuideEpgRow.setOnClickListener {
+            repository.setGuideProgramTitlesEnabled(!repository.isGuideProgramTitlesEnabled())
+            updateSettingsToggleUi()
+            channelAdapter.notifyDataSetChanged()
         }
 
         settingsAutoRenumberBtn.setOnClickListener {
@@ -360,6 +447,7 @@ class MainActivity : Activity(), CoroutineScope {
             onVideoAvailable = {
                 progressHandler.removeCallbacks(showProgressRunnable)
                 progressHandler.removeCallbacks(hideProgressFallbackRunnable)
+                progressHandler.removeCallbacks(stuckTuningRunnable)
                 progressBar.visibility = View.GONE
                 channelUnavailableText.visibility = View.GONE
 
@@ -376,20 +464,9 @@ class MainActivity : Activity(), CoroutineScope {
                 mediaSession.setPlaybackState(stateBuilder.build())
 
                 when {
-                    reason == TvInputManager.VIDEO_UNAVAILABLE_REASON_TUNING -> {
-                        progressHandler.postDelayed(showProgressRunnable, TUNING_SHOW_DELAY_MS)
-                        progressHandler.postDelayed(hideProgressFallbackRunnable, TUNING_FALLBACK_TIMEOUT_MS)
-                    }
-                    reason == TvInputManager.VIDEO_UNAVAILABLE_REASON_BUFFERING && !tvViewHelper.hasStartedPlayback() -> {
-                        progressHandler.postDelayed(showProgressRunnable, TUNING_SHOW_DELAY_MS)
-                        progressHandler.postDelayed(hideProgressFallbackRunnable, TUNING_FALLBACK_TIMEOUT_MS)
-                    }
-                    reason == TvInputManager.VIDEO_UNAVAILABLE_REASON_BUFFERING -> {
-                        progressHandler.postDelayed(showProgressRunnable, SUSTAINED_BUFFERING_THRESHOLD_MS)
-                        progressHandler.postDelayed(
-                            hideProgressFallbackRunnable,
-                            SUSTAINED_BUFFERING_THRESHOLD_MS + TUNING_FALLBACK_TIMEOUT_MS
-                        )
+                    reason == TvInputManager.VIDEO_UNAVAILABLE_REASON_TUNING ||
+                        reason == TvInputManager.VIDEO_UNAVAILABLE_REASON_BUFFERING -> {
+                        progressHandler.postDelayed(stuckTuningRunnable, TUNING_FALLBACK_TIMEOUT_MS)
                     }
                     else -> {
                         showChannelUnavailable()
@@ -410,9 +487,13 @@ class MainActivity : Activity(), CoroutineScope {
             epgRepository = epgRepository,
             isFavoriteChecker = { id -> repository.isFavorite(id) },
             onChannelClick = { channel ->
-                tuneToChannel(channel)
-                hideSidebar()
+                if (selectedChannel?.id == channel.id && tvViewHelper.isTunedTo(channel.id)) {
+                    hideSidebar()
+                } else {
+                    tuneToChannel(channel)
+                }
             },
+            showProgramTitles = { repository.isGuideProgramTitlesEnabled() },
             onChannelLongClick = { channel ->
                 val isNowFav = repository.toggleFavorite(channel.id)
                 channelAdapter.notifyFavoriteChanged(channel.id)
@@ -427,13 +508,24 @@ class MainActivity : Activity(), CoroutineScope {
         channelRecyclerView.layoutManager = LinearLayoutManager(this)
         channelRecyclerView.setHasFixedSize(true)
         channelRecyclerView.itemAnimator = null
+        channelRecyclerView.setItemViewCacheSize(24)
+        channelRecyclerView.isNestedScrollingEnabled = false
         channelRecyclerView.adapter = channelAdapter
 
         channelSettingsAdapter = ChannelSettingsAdapter(
             channels = emptyList(),
             scope = this,
+            isHiddenChecker = { id -> repository.isHidden(id) },
             onChannelClick = { channel ->
-                openEditNumberDialog(channel)
+                if (repository.isHidden(channel.id)) {
+                    repository.setHidden(channel.id, false)
+                    channelSettingsAdapter.updateChannels(allChannels)
+                    refreshDisplayedChannels()
+                    updateSettingsToggleUi()
+                    Toast.makeText(this, "Restored ${channel.displayName}", Toast.LENGTH_SHORT).show()
+                } else {
+                    openEditNumberDialog(channel)
+                }
             },
             onChannelLongClick = { channel ->
                 repository.setStartupMode(StartupMode.FIXED_DEFAULT)
@@ -478,40 +570,145 @@ class MainActivity : Activity(), CoroutineScope {
     }
 
     private fun refreshDisplayedChannels() {
-        val displayed = if (isFavoritesFilterActive) {
-            allChannels.filter { repository.isFavorite(it.id) }
-        } else {
-            allChannels
+        val genre = activeGenre
+        val displayed = allChannels.filter { ch ->
+            val matchesFavorites = !isFavoritesFilterActive || repository.isFavorite(ch.id)
+            val effectiveGenre = ch.genre.ifBlank { GENRE_GENERAL }
+            val matchesGenre = genre == null || effectiveGenre == genre
+            matchesFavorites && matchesGenre && !repository.isHidden(ch.id)
         }
         channelAdapter.updateChannels(displayed)
         updateSidebarHeader(displayed.size)
     }
 
+    private fun buildGenreList() {
+        genreList.removeAllViews()
+        val genreCounts = allChannels.map { it.genre.ifBlank { GENRE_GENERAL } }
+        val realGenres = genreCounts.filter { it != GENRE_GENERAL }.distinct().sorted()
+        if (realGenres.isEmpty()) {
+            val emptyState = TextView(this).apply {
+                text = "Categories unavailable for this lineup"
+                textSize = 14f
+                setTextColor(resources.getColor(R.color.text_secondary, null))
+                gravity = android.view.Gravity.CENTER
+                setPadding(24, 28, 24, 28)
+                isFocusable = true
+                isClickable = true
+                background = resources.getDrawable(
+                    com.vorynlabs.vividorbit.R.drawable.item_background_selector,
+                    null
+                )
+                setOnClickListener { openSettings() }
+            }
+            genreList.addView(emptyState)
+            return
+        }
+        val hasGeneral = genreCounts.any { it == GENRE_GENERAL }
+        val density = resources.displayMetrics.density
+        val labels = listOf(GENRE_ALL) + realGenres + if (hasGeneral) listOf(GENRE_GENERAL) else emptyList()
+        labels.forEach { label ->
+            val row = TextView(this).apply {
+                text = label
+                textSize = 15f
+                setTextColor(resources.getColor(R.color.text_primary, null))
+                setPadding((16 * density).toInt(), (13 * density).toInt(), (16 * density).toInt(), (13 * density).toInt())
+                isFocusable = true
+                isClickable = true
+                background = resources.getDrawable(
+                    com.vorynlabs.vividorbit.R.drawable.item_background_selector,
+                    null
+                )
+                isSelected = if (label == GENRE_ALL) activeGenre == null else activeGenre == label
+                tag = label
+                setOnClickListener { applyGenreFilter(label) }
+            }
+            genreList.addView(
+                row,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = (4 * density).toInt() }
+            )
+        }
+    }
+
+    private fun applyGenreFilter(label: String) {
+        activeGenre = if (label == GENRE_ALL) null else label
+        buildGenreList()
+        refreshDisplayedChannels()
+        showGuideLevel()
+    }
+
+    private fun hasGenres(): Boolean = genreList.childCount > 0
+
+    private fun showGuideLevel(forceFocus: Boolean = true) {
+        guideLevel = 1
+        genreList.visibility = View.GONE
+        channelRecyclerView.visibility = View.VISIBLE
+        noChannelsText.visibility = if (channelAdapter.itemCount == 0) View.VISIBLE else View.GONE
+        if (forceFocus) channelRecyclerView.requestFocus()
+        resetSidebarTimer()
+    }
+
+    private fun showGenresLevel() {
+        if (!hasGenres()) {
+            openSettings()
+            return
+        }
+        guideLevel = 2
+        channelRecyclerView.visibility = View.GONE
+        noChannelsText.visibility = View.GONE
+        genreList.visibility = View.VISIBLE
+        genreList.getChildAt(0)?.requestFocus()
+        resetSidebarTimer()
+    }
+
     private fun loadChannelData(preserveCurrentChannel: Boolean = false) {
         launch {
             progressBar.visibility = View.VISIBLE
-            allChannels = repository.getChannels()
+            if (allChannels.isEmpty()) {
+                val cached = repository.getCachedChannels()
+                if (cached.isNotEmpty()) {
+                    allChannels = cached
+                    buildGenreList()
+                    refreshDisplayedChannels()
+                    updateSettingsToggleUi()
+                    tuneToStartupChannel(preserveCurrentChannel)
+                }
+            }
 
+            val fresh = repository.getChannels()
+            repository.saveChannelsCache(fresh)
+            allChannels = fresh
+            buildGenreList()
             refreshDisplayedChannels()
             channelSettingsAdapter.updateChannels(allChannels)
             startupPickerAdapter.updateChannels(allChannels)
 
             progressBar.visibility = View.GONE
             updateSettingsToggleUi()
+            tuneToStartupChannel(preserveCurrentChannel)
+        }
+    }
 
-            if (allChannels.isNotEmpty()) {
-                val startChannel = repository.resolveStartupChannel(allChannels, preserveCurrentChannel, selectedChannel)
-                if (startChannel != null) {
-                    tuneToChannel(startChannel)
-                }
-            } else {
-                showSidebar()
+    private fun tuneToStartupChannel(preserveCurrentChannel: Boolean) {
+        val visible = zapChannels()
+        if (visible.isNotEmpty()) {
+            val startChannel = repository.resolveStartupChannel(visible, preserveCurrentChannel, selectedChannel)
+            if (startChannel != null) {
+                tuneToChannel(startChannel)
             }
+        } else {
+            showSidebar()
         }
     }
 
     private fun updateSidebarHeader(count: Int) {
-        val title = if (isFavoritesFilterActive) "Favorites · $count" else "Channels · $count"
+        val title = when {
+            isFavoritesFilterActive -> "Favorites"
+            activeGenre != null -> activeGenre ?: "Guide"
+            else -> "Guide"
+        }
         sidebarHeader.text = title
         noChannelsText.visibility = if (count == 0) View.VISIBLE else View.GONE
     }
@@ -536,6 +733,25 @@ class MainActivity : Activity(), CoroutineScope {
                 settingsStartupSubtitle.text = getString(R.string.startup_mode_fixed_format, title)
             }
         }
+
+        val bannerSec = (repository.getBannerHideMs() / 1000L).toString()
+        settingsBannerSubtitle.text = getString(R.string.settings_banner_seconds, bannerSec)
+        val guideHideMs = repository.getGuideAutoHideMs()
+        settingsGuideHideSubtitle.text = if (guideHideMs <= 0L) {
+            getString(R.string.settings_guide_hide_off)
+        } else {
+            getString(R.string.settings_guide_hide_seconds, (guideHideMs / 1000L).toString())
+        }
+        val hiddenCount = repository.getHiddenIds().size
+        val watching = selectedChannel
+        settingsHideSubtitle.text = if (watching != null) {
+            "${watching.displayName} · " + getString(R.string.settings_hidden_count, hiddenCount)
+        } else {
+            getString(R.string.settings_hidden_count, hiddenCount)
+        }
+        val guideEpg = repository.isGuideProgramTitlesEnabled()
+        settingsGuideEpgBadge.text = if (guideEpg) getString(R.string.toggle_on) else getString(R.string.toggle_off)
+        settingsGuideEpgBadge.isSelected = guideEpg
     }
 
     private fun openSettings() {
@@ -550,26 +766,12 @@ class MainActivity : Activity(), CoroutineScope {
     private fun closeSettings() {
         settingsContainer.visibility = View.GONE
         sidebarContainer.visibility = View.VISIBLE
-
-        val activeChannel = selectedChannel
-        val currentList = if (isFavoritesFilterActive) allChannels.filter { repository.isFavorite(it.id) } else allChannels
-        val index = if (activeChannel != null) {
-            currentList.indexOfFirst { it.id == activeChannel.id }
+        if (hasGenres()) {
+            showGenresLevel()
         } else {
-            -1
+            focusChannelListAtSelected()
+            showGuideLevel(forceFocus = false)
         }
-
-        val lm = channelRecyclerView.layoutManager as? LinearLayoutManager
-        if (index != -1 && lm != null) {
-            lm.scrollToPositionWithOffset(index, 140)
-            channelRecyclerView.post {
-                val holder = channelRecyclerView.findViewHolderForAdapterPosition(index)
-                holder?.itemView?.requestFocus() ?: channelRecyclerView.requestFocus()
-            }
-        } else {
-            channelRecyclerView.requestFocus()
-        }
-        resetSidebarTimer()
     }
 
     private fun openStartupPicker() {
@@ -618,7 +820,7 @@ class MainActivity : Activity(), CoroutineScope {
             currentSessionToken = bytes.joinToString("") { "%02x".format(it) }
         }
 
-        val url = "http://$ip:8080/?t=$currentSessionToken"
+        val url = "http://$ip:10230/?t=$currentSessionToken"
         qrUrlText.text = url
 
         val qrBitmap = QrCodeGenerator.generateQrBitmap(url, 400, 400)
@@ -634,7 +836,7 @@ class MainActivity : Activity(), CoroutineScope {
             localConfigServer = LocalConfigServer(
                 context = this,
                 repository = repository,
-                port = 8080,
+                port = 10230,
                 sessionToken = currentSessionToken,
                 onDataChanged = {
                     runOnUiThread {
@@ -661,6 +863,15 @@ class MainActivity : Activity(), CoroutineScope {
         qrPanelCard.visibility = View.GONE
         settingsPhoneSetupRow.requestFocus()
         resetSidebarTimer()
+    }
+
+    private fun openAboutUs() {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(ABOUT_US_URL))
+            startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(this, R.string.about_us_no_browser, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun toggleCustomNumbers() {
@@ -694,20 +905,7 @@ class MainActivity : Activity(), CoroutineScope {
         editChannelName.text = channel.displayName
         editNumberDisplay.text = editBuffer
 
-        val cachedLogo = ChannelLogoLoader.getCached(channel.id)
-        if (cachedLogo != null) {
-            editChannelLogo.setImageBitmap(cachedLogo)
-        } else {
-            editChannelLogo.setImageResource(android.R.drawable.ic_menu_slideshow)
-            launch(Dispatchers.IO) {
-                val bitmap = ChannelLogoLoader.loadAndCache(this@MainActivity, channel.id, channel.logoUri)
-                withContext(Dispatchers.Main) {
-                    if (editingChannel?.id == channel.id && bitmap != null) {
-                        editChannelLogo.setImageBitmap(bitmap)
-                    }
-                }
-            }
-        }
+        ChannelLogoLoader.bind(editChannelLogo, this, channel.id, channel.logoUri)
 
         updateConflictIndicator(editBuffer)
         editNumberCard.visibility = View.VISIBLE
@@ -754,11 +952,13 @@ class MainActivity : Activity(), CoroutineScope {
     private fun showChannelUnavailable() {
         progressHandler.removeCallbacks(showProgressRunnable)
         progressHandler.removeCallbacks(hideProgressFallbackRunnable)
+        progressHandler.removeCallbacks(stuckTuningRunnable)
         progressBar.visibility = View.GONE
         channelUnavailableText.visibility = View.VISIBLE
     }
 
     private fun tuneToChannel(channel: Channel) {
+        previewChannel = null
         val current = selectedChannel
         if (current != null && current.id != channel.id) {
             previousChannelId = current.id
@@ -779,7 +979,8 @@ class MainActivity : Activity(), CoroutineScope {
 
         progressHandler.removeCallbacks(showProgressRunnable)
         progressHandler.removeCallbacks(hideProgressFallbackRunnable)
-        progressHandler.postDelayed(showProgressRunnable, TUNING_SHOW_DELAY_MS)
+        progressHandler.removeCallbacks(stuckTuningRunnable)
+        progressBar.visibility = View.GONE
         tvViewHelper.tune(channel.inputId, channel.id, TvContract.buildChannelUri(channel.id))
     }
 
@@ -799,29 +1000,25 @@ class MainActivity : Activity(), CoroutineScope {
         bannerChannelName.text = channel.displayName
         bannerEpgLayout.visibility = View.GONE
 
-        val cachedLogo = ChannelLogoLoader.getCached(channel.id)
-        if (cachedLogo != null) {
-            bannerChannelLogo.setImageBitmap(cachedLogo)
-        } else {
-            bannerChannelLogo.setImageResource(android.R.drawable.ic_menu_slideshow)
-            launch(Dispatchers.IO) {
-                val bitmap = ChannelLogoLoader.loadAndCache(this@MainActivity, channel.id, channel.logoUri)
-                withContext(Dispatchers.Main) {
-                    if (selectedChannel?.id == channel.id) {
-                        if (bitmap != null) {
-                            bannerChannelLogo.setImageBitmap(bitmap)
-                        } else {
-                            bannerChannelLogo.setImageResource(android.R.drawable.ic_menu_slideshow)
-                        }
-                    }
-                }
-            }
-        }
+        ChannelLogoLoader.bind(bannerChannelLogo, this, channel.id, channel.logoUri)
 
+        pendingBannerChannel = channel
+        bannerHandler.removeCallbacks(fetchBannerEpgRunnable)
+        bannerHandler.postDelayed(fetchBannerEpgRunnable, EPG_FETCH_DEBOUNCE_MS)
+
+        channelBannerCard.visibility = View.VISIBLE
+
+        bannerHandler.removeCallbacks(hideBannerRunnable)
+        bannerHandler.postDelayed(hideBannerRunnable, repository.getBannerHideMs())
+    }
+
+    private fun fetchBannerEpg(channel: Channel) {
         launch(Dispatchers.IO) {
             val (nowProgram, nextProgram) = epgRepository.getNowAndNext(channel.id)
             withContext(Dispatchers.Main) {
-                if (selectedChannel?.id == channel.id && nowProgram != null && nowProgram.title.isNotBlank()) {
+                val shownId = pendingBannerChannel?.id ?: selectedChannel?.id
+                if (shownId != channel.id) return@withContext
+                if (nowProgram != null && nowProgram.title.isNotBlank()) {
                     bannerProgramTitle.text = nowProgram.title
                     bannerProgramTime.text = nowProgram.getFormattedTimeWindow()
                     bannerProgramProgress.progress = nowProgram.getProgressPercent()
@@ -836,20 +1033,134 @@ class MainActivity : Activity(), CoroutineScope {
                     }
 
                     bannerEpgLayout.visibility = View.VISIBLE
-                } else if (selectedChannel?.id == channel.id) {
+                } else {
                     bannerEpgLayout.visibility = View.GONE
                 }
             }
         }
+    }
 
-        channelBannerCard.visibility = View.VISIBLE
+    private fun openChannelPrograms(channel: Channel) {
+        activeProgramsChannel = channel
+        programsTitle.text = channel.displayName
+        programsSubtitle.text = "Channel ${channel.displayNumber}"
+        programsContainer.removeAllViews()
+        channelProgramsCard.visibility = View.VISIBLE
+        resetSidebarTimer()
 
-        bannerHandler.removeCallbacks(hideBannerRunnable)
-        bannerHandler.postDelayed(hideBannerRunnable, BANNER_AUTO_HIDE_MS)
+        launch(Dispatchers.IO) {
+            val nowPlaying = epgRepository.getNowAndNext(channel.id)
+            val upcoming = epgRepository.getUpcoming(channel.id, 7)
+            withContext(Dispatchers.Main) {
+                if (activeProgramsChannel?.id != channel.id) return@withContext
+                programsContainer.removeAllViews()
+                val density = resources.displayMetrics.density
+                val nowEnd = nowPlaying.first?.endTimeUtcMillis ?: 0L
+                val programs = buildList {
+                    nowPlaying.first?.let { add(it) }
+                    addAll(upcoming.filter { it.startTimeUtcMillis >= nowEnd })
+                }
+
+                if (programs.isEmpty()) {
+                    val empty = TextView(this@MainActivity).apply {
+                        text = "No program information available"
+                        setTextColor(resources.getColor(R.color.text_secondary, null))
+                        textSize = 14f
+                        setPadding(0, (14 * density).toInt(), 0, (14 * density).toInt())
+                    }
+                    programsContainer.addView(empty)
+                }
+
+                programs.forEach { program ->
+                    val row = LinearLayout(this@MainActivity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = android.view.Gravity.CENTER_VERTICAL
+                        setPadding((14 * density).toInt(), (11 * density).toInt(), (14 * density).toInt(), (11 * density).toInt())
+                        isFocusable = true
+                        isClickable = true
+                        background = resources.getDrawable(R.drawable.item_background_selector, null)
+                        setOnClickListener { tuneChannelFromPrograms(channel) }
+                    }
+                    val name = TextView(this@MainActivity).apply {
+                        text = program.title
+                        setTextColor(resources.getColor(R.color.text_primary, null))
+                        textSize = 15f
+                        maxLines = 1
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                    }
+                    val time = TextView(this@MainActivity).apply {
+                        text = program.getFormattedTimeWindow()
+                        setTextColor(resources.getColor(R.color.text_secondary, null))
+                        textSize = 12f
+                    }
+                    row.addView(
+                        name,
+                        LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    )
+                    row.addView(
+                        time,
+                        LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                        ).apply { marginStart = (12 * density).toInt() }
+                    )
+                    programsContainer.addView(row)
+                }
+
+                programsContainer.getChildAt(0)?.requestFocus()
+            }
+        }
+    }
+
+    private fun closeChannelPrograms() {
+        channelProgramsCard.visibility = View.GONE
+        activeProgramsChannel = null
+        guideLevel = 1
+        channelRecyclerView.requestFocus()
+        resetSidebarTimer()
+    }
+
+    private fun focusedGuideChannel(): Channel? {
+        val focused = channelRecyclerView.focusedChild
+        if (focused != null) {
+            val position = channelRecyclerView.getChildAdapterPosition(focused)
+            channelAdapter.channelAt(position)?.let { return it }
+        }
+        return selectedChannel
+    }
+
+    private fun tuneChannelFromPrograms(channel: Channel) {
+        closeChannelPrograms()
+        tuneToChannel(channel)
+        hideSidebar()
+    }
+
+    private fun zapChannels(): List<Channel> {
+        return allChannels.filter { ch ->
+            !repository.isHidden(ch.id) && (!isFavoritesFilterActive || repository.isFavorite(ch.id))
+        }
+    }
+
+    private fun browseBanner(direction: Int) {
+        val currentList = zapChannels()
+        if (currentList.isEmpty()) return
+        val current = previewChannel ?: selectedChannel
+        var nextIndex = 0
+        if (current != null) {
+            val currentIndex = currentList.indexOfFirst { it.id == current.id }
+            if (currentIndex != -1) {
+                nextIndex = (currentIndex + direction) % currentList.size
+                if (nextIndex < 0) nextIndex += currentList.size
+            }
+        }
+        val target = currentList[nextIndex]
+        previewChannel = target
+        showBottomBanner(target)
     }
 
     private fun navigateChannel(direction: Int, isRepeat: Boolean) {
-        val currentList = if (isFavoritesFilterActive) allChannels.filter { repository.isFavorite(it.id) } else allChannels
+        previewChannel = null
+        val currentList = zapChannels()
         if (currentList.isEmpty()) return
 
         val current = pendingZapChannel ?: selectedChannel
@@ -885,6 +1196,7 @@ class MainActivity : Activity(), CoroutineScope {
                 (::startupPickerCard.isInitialized && startupPickerCard.visibility == View.VISIBLE) ||
                 (::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE) ||
                 (::confirmActionCard.isInitialized && confirmActionCard.visibility == View.VISIBLE) ||
+                (::channelProgramsCard.isInitialized && channelProgramsCard.visibility == View.VISIBLE) ||
                 (::numericEntryCard.isInitialized && numericEntryCard.visibility == View.VISIBLE)
     }
 
@@ -912,20 +1224,14 @@ class MainActivity : Activity(), CoroutineScope {
 
     private fun resetSidebarTimer() {
         sidebarHandler.removeCallbacks(hideSidebarRunnable)
-        if (isAnyMenuVisible()) {
-            sidebarHandler.postDelayed(hideSidebarRunnable, SIDEBAR_AUTO_HIDE_MS)
+        if (::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE) return
+        val hideMs = repository.getGuideAutoHideMs()
+        if (hideMs > 0L && isAnyMenuVisible()) {
+            sidebarHandler.postDelayed(hideSidebarRunnable, hideMs)
         }
     }
 
-    private fun showSidebar() {
-        settingsContainer.visibility = View.GONE
-        editNumberCard.visibility = View.GONE
-        startupPickerCard.visibility = View.GONE
-        qrPanelCard.visibility = View.GONE
-        confirmActionCard.visibility = View.GONE
-        if (::numericEntryCard.isInitialized) numericEntryCard.visibility = View.GONE
-        sidebarContainer.visibility = View.VISIBLE
-
+    private fun focusChannelListAtSelected() {
         val activeChannel = selectedChannel
         val currentList = if (isFavoritesFilterActive) allChannels.filter { repository.isFavorite(it.id) } else allChannels
         val index = if (activeChannel != null) {
@@ -944,8 +1250,18 @@ class MainActivity : Activity(), CoroutineScope {
         } else {
             channelRecyclerView.requestFocus()
         }
+    }
 
-        resetSidebarTimer()
+    private fun showSidebar() {
+        settingsContainer.visibility = View.GONE
+        editNumberCard.visibility = View.GONE
+        startupPickerCard.visibility = View.GONE
+        qrPanelCard.visibility = View.GONE
+        confirmActionCard.visibility = View.GONE
+        if (::numericEntryCard.isInitialized) numericEntryCard.visibility = View.GONE
+        sidebarContainer.visibility = View.VISIBLE
+        focusChannelListAtSelected()
+        showGuideLevel(forceFocus = false)
     }
 
     private fun hideSidebar() {
@@ -955,6 +1271,7 @@ class MainActivity : Activity(), CoroutineScope {
         if (::startupPickerCard.isInitialized) startupPickerCard.visibility = View.GONE
         if (::confirmActionCard.isInitialized) confirmActionCard.visibility = View.GONE
         if (::numericEntryCard.isInitialized) numericEntryCard.visibility = View.GONE
+        if (::channelProgramsCard.isInitialized) channelProgramsCard.visibility = View.GONE
         if (::qrPanelCard.isInitialized) {
             qrPanelCard.visibility = View.GONE
             localConfigServer?.stop()
@@ -966,6 +1283,7 @@ class MainActivity : Activity(), CoroutineScope {
 
     override fun onKeyLongPress(keyCode: Int, event: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK && !isAnyMenuVisible()) {
+            backLongPressHandled = true
             recallPreviousChannel()
             return true
         }
@@ -977,6 +1295,8 @@ class MainActivity : Activity(), CoroutineScope {
 
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             event.startTracking()
+            backLongPressHandled = false
+            return true
         }
 
         if (::confirmActionCard.isInitialized && confirmActionCard.visibility == View.VISIBLE) {
@@ -985,6 +1305,35 @@ class MainActivity : Activity(), CoroutineScope {
                 return true
             }
             return super.onKeyDown(keyCode, event)
+        }
+
+        if (::channelProgramsCard.isInitialized && channelProgramsCard.visibility == View.VISIBLE) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
+                keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                val focusedIndex = programsContainer.indexOfChild(currentFocus)
+                val lastIndex = programsContainer.childCount - 1
+                if (focusedIndex < 0) {
+                    programsContainer.getChildAt(0)?.requestFocus()
+                    return true
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                    programsContainer.getChildAt((focusedIndex - 1).coerceAtLeast(0))?.requestFocus()
+                    return true
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    programsContainer.getChildAt((focusedIndex + 1).coerceAtMost(lastIndex))?.requestFocus()
+                    return true
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    closeChannelPrograms()
+                    return true
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return true
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                currentFocus?.performClick()
+                return true
+            }
         }
 
         if (::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE) {
@@ -1074,7 +1423,19 @@ class MainActivity : Activity(), CoroutineScope {
 
         if (::sidebarContainer.isInitialized && sidebarContainer.visibility == View.VISIBLE) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                openSettings()
+                if (genreList.visibility == View.VISIBLE) {
+                    openSettings()
+                } else {
+                    showGenresLevel()
+                }
+                return true
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                if (genreList.visibility == View.VISIBLE) {
+                    showGuideLevel()
+                } else {
+                    focusedGuideChannel()?.let { openChannelPrograms(it) }
+                }
                 return true
             }
         }
@@ -1122,19 +1483,20 @@ class MainActivity : Activity(), CoroutineScope {
 
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
             if (!isAnyMenuVisible()) {
-                navigateChannel(-1, event.repeatCount > 0)
+                browseBanner(1)
                 return true
             }
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
             if (!isAnyMenuVisible()) {
-                navigateChannel(1, event.repeatCount > 0)
+                browseBanner(-1)
                 return true
             }
         }
 
         if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
-            if (!isAnyMenuVisible()) {
+            val numericEntryActive = ::numericEntryCard.isInitialized && numericEntryCard.visibility == View.VISIBLE
+            if (!isAnyMenuVisible() || numericEntryActive) {
                 if (numericBuffer.length < NUMERIC_ENTRY_MAX_DIGITS) {
                     val digit = (keyCode - KeyEvent.KEYCODE_0).toString()
                     numericHandler.removeCallbacks(tuneRunnable)
@@ -1156,7 +1518,12 @@ class MainActivity : Activity(), CoroutineScope {
 
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
             if (!isAnyMenuVisible()) {
-                selectedChannel?.let { showBottomBanner(it) }
+                val preview = previewChannel
+                if (preview != null && preview.id != selectedChannel?.id) {
+                    tuneToChannel(preview)
+                } else {
+                    selectedChannel?.let { showBottomBanner(it) }
+                }
                 return true
             }
         }
@@ -1166,7 +1533,7 @@ class MainActivity : Activity(), CoroutineScope {
                 showSidebar()
                 return true
             } else if (::sidebarContainer.isInitialized && sidebarContainer.visibility == View.VISIBLE) {
-                openSettings()
+                showGenresLevel()
                 return true
             } else if (::settingsContainer.isInitialized && settingsContainer.visibility == View.VISIBLE) {
                 hideSidebar()
@@ -1175,6 +1542,32 @@ class MainActivity : Activity(), CoroutineScope {
         }
 
         return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            if (backLongPressHandled) {
+                backLongPressHandled = false
+                return true
+            }
+            when {
+                ::channelProgramsCard.isInitialized && channelProgramsCard.visibility == View.VISIBLE -> closeChannelPrograms()
+                ::confirmActionCard.isInitialized && confirmActionCard.visibility == View.VISIBLE -> closeConfirmation()
+                ::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE -> closePhoneSetup()
+                ::startupPickerCard.isInitialized && startupPickerCard.visibility == View.VISIBLE -> closeStartupPicker()
+                ::editNumberCard.isInitialized && editNumberCard.visibility == View.VISIBLE -> closeEditNumberDialog()
+                ::settingsContainer.isInitialized && settingsContainer.visibility == View.VISIBLE -> closeSettings()
+                ::sidebarContainer.isInitialized && sidebarContainer.visibility == View.VISIBLE && genreList.visibility == View.VISIBLE -> showGuideLevel()
+                ::sidebarContainer.isInitialized && sidebarContainer.visibility == View.VISIBLE -> hideSidebar()
+                ::numericEntryCard.isInitialized && numericEntryCard.visibility == View.VISIBLE -> {
+                    numericHandler.removeCallbacks(tuneRunnable)
+                    numericBuffer = ""
+                    numericEntryCard.visibility = View.GONE
+                }
+            }
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
     }
 
     override fun onResume() {
