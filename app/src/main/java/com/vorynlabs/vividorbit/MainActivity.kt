@@ -202,6 +202,8 @@ class MainActivity : Activity(), CoroutineScope {
     private var activeProgramsChannel: Channel? = null
     private var guideLevel = 1
     private var backLongPressHandled = false
+    private var lastBackPressTime = 0L
+    private var hasRevertedToPrevious = false
 
     private var numericBuffer = ""
     private val numericHandler = Handler(Looper.getMainLooper())
@@ -992,6 +994,7 @@ class MainActivity : Activity(), CoroutineScope {
 
         pendingZapChannel = null
         selectedChannel = channel
+        hasRevertedToPrevious = false
         repository.setLastChannelId(channel.id)
         showBottomBanner(channel)
         channelUnavailableText.visibility = View.GONE
@@ -1457,6 +1460,13 @@ class MainActivity : Activity(), CoroutineScope {
         }
 
         if (::sidebarContainer.isInitialized && sidebarContainer.visibility == View.VISIBLE) {
+            val focused = currentFocus
+            val isHeaderOrTabFocused = focused == sidebarTabAll || focused == sidebarTabFavs || focused == sidebarSettingsBtn
+            if (isHeaderOrTabFocused) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    return super.onKeyDown(keyCode, event)
+                }
+            }
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
                 if (genreList.visibility == View.VISIBLE) {
                     openSettings()
@@ -1587,7 +1597,7 @@ class MainActivity : Activity(), CoroutineScope {
             }
             when {
                 ::walkthroughController.isInitialized && walkthroughController.isVisible() -> {
-                    // BACK already handled in onKeyDown; nothing to close here.
+                    // Handled in onKeyDown
                 }
                 ::channelProgramsCard.isInitialized && channelProgramsCard.visibility == View.VISIBLE -> closeChannelPrograms()
                 ::confirmActionCard.isInitialized && confirmActionCard.visibility == View.VISIBLE -> closeConfirmation()
@@ -1601,6 +1611,23 @@ class MainActivity : Activity(), CoroutineScope {
                     numericHandler.removeCallbacks(tuneRunnable)
                     numericBuffer = ""
                     numericEntryCard.visibility = View.GONE
+                }
+                else -> {
+                    val now = System.currentTimeMillis()
+                    if (now - lastBackPressTime < 2000L) {
+                        finish()
+                    } else {
+                        val prevId = previousChannelId ?: repository.getPreviousChannelId().takeIf { it != -1L }
+                        if (prevId != null && prevId != selectedChannel?.id && !hasRevertedToPrevious) {
+                            recallPreviousChannel()
+                            hasRevertedToPrevious = true
+                            lastBackPressTime = now
+                            Toast.makeText(this, "Press BACK again to exit", Toast.LENGTH_SHORT).show()
+                        } else {
+                            lastBackPressTime = now
+                            Toast.makeText(this, "Press BACK again to exit", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
             return true

@@ -217,7 +217,9 @@
                     android:paddingBottom="12dp"
                     android:text="@string/walkthrough_skip"
                     android:textColor="@color/text_primary"
-                    android:textSize="14sp" />
+                    android:textSize="14sp"
+                    android:nextFocusRight="@+id/walkthrough_back_btn"
+                    android:nextFocusUp="@+id/walkthrough_demo_row_2" />
 
                 <TextView
                     android:id="@+id/walkthrough_back_btn"
@@ -235,7 +237,10 @@
                     android:paddingBottom="12dp"
                     android:text="@string/walkthrough_back"
                     android:textColor="@color/text_primary"
-                    android:textSize="14sp" />
+                    android:textSize="14sp"
+                    android:nextFocusLeft="@+id/walkthrough_skip_btn"
+                    android:nextFocusRight="@+id/walkthrough_next_btn"
+                    android:nextFocusUp="@+id/walkthrough_demo_row_2" />
 
                 <TextView
                     android:id="@+id/walkthrough_next_btn"
@@ -252,7 +257,9 @@
                     android:paddingBottom="12dp"
                     android:text="@string/walkthrough_next"
                     android:textColor="@color/text_primary"
-                    android:textSize="14sp" />
+                    android:textSize="14sp"
+                    android:nextFocusLeft="@+id/walkthrough_back_btn"
+                    android:nextFocusUp="@+id/walkthrough_demo_row_2" />
             </LinearLayout>
         </LinearLayout>
     </androidx.cardview.widget.CardView>

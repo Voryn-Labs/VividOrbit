@@ -62,49 +62,28 @@ class WalkthroughController(
     fun handleKey(keyCode: Int): Boolean {
         if (!isVisible()) return false
         if (isRemotePage(currentPage)) lightChip(keyCode)
-        val playgroundFocused = isPlaygroundPage(currentPage) && demoRows.any { it.hasFocus() }
         return when (keyCode) {
             KeyEvent.KEYCODE_BACK -> {
                 goBack()
                 true
-            }
-            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                if (playgroundFocused && currentPage == 3) {
-                    onDemoHide()
-                    true
-                } else if (playgroundFocused) {
-                    false
-                } else {
-                    goPrevPage()
-                    true
-                }
-            }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                if (playgroundFocused) false else {
-                    goNext()
-                    true
-                }
             }
             else -> false
         }
     }
 
     private fun goBack() {
-        if (currentPage == 0) onFinish() else {
-            currentPage = prevWalkthroughPage(currentPage)
-            bindPage()
-        }
-    }
-
-    private fun goPrevPage() {
-        if (currentPage > 0) {
+        if (currentPage == 0) {
+            onFinish()
+        } else {
             currentPage = prevWalkthroughPage(currentPage)
             bindPage()
         }
     }
 
     private fun goNext() {
-        if (isLastWalkthroughPage(currentPage)) onFinish() else {
+        if (isLastWalkthroughPage(currentPage)) {
+            onFinish()
+        } else {
             currentPage = nextWalkthroughPage(currentPage)
             bindPage()
         }
@@ -122,11 +101,23 @@ class WalkthroughController(
         chips.visibility = if (isRemotePage(currentPage)) View.VISIBLE else View.GONE
         playground.visibility = if (isPlaygroundPage(currentPage)) View.VISIBLE else View.GONE
         phonePanel.visibility = if (isPhonePage(currentPage)) View.VISIBLE else View.GONE
-        if (isPlaygroundPage(currentPage)) bindDemoRows()
-        if (isRemotePage(currentPage)) bindChips()
-        if (!isPlaygroundPage(currentPage)) hideStatus()
+
+        if (isPlaygroundPage(currentPage)) {
+            bindDemoRows()
+        }
+        if (isRemotePage(currentPage)) {
+            bindChips()
+        }
+        if (!isPlaygroundPage(currentPage)) {
+            hideStatus()
+        }
         bindDots()
-        if (isPlaygroundPage(currentPage)) demoRows.first().requestFocus() else nextBtn.requestFocus()
+
+        if (isPlaygroundPage(currentPage)) {
+            demoRows.first().requestFocus()
+        } else {
+            nextBtn.requestFocus()
+        }
     }
 
     private fun bindDemoRows() {
@@ -196,20 +187,6 @@ class WalkthroughController(
             )
             bindDemoRows()
         }
-    }
-
-    private fun onDemoHide() {
-        val index = demoRows.indexOfFirst { it.hasFocus() }
-        if (index < 0) return
-        val channel = channels[index]
-        val hidden = toggleDemoHidden(channels, channel.id)
-        statusView.visibility = View.VISIBLE
-        statusView.text = overlay.context.getString(
-            if (hidden) R.string.walkthrough_status_hidden else R.string.walkthrough_status_restored,
-            channel.name
-        )
-        bindDemoRows()
-        demoRows[index].requestFocus()
     }
 
     private fun hideStatus() {
