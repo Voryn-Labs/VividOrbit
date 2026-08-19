@@ -11,7 +11,8 @@ data class WalkthroughDemoChannel(
 
 data class DemoAssignResult(
     val assignedNumber: String,
-    val swappedWith: String?
+    val swappedWith: String?,
+    val swappedNumber: String? = null
 )
 
 fun walkthroughPageCount(): Int = 6
@@ -39,22 +40,29 @@ fun seedDemoChannels(): MutableList<WalkthroughDemoChannel> = mutableListOf(
     WalkthroughDemoChannel(3, "DD News", "12", "12")
 )
 
-/** Give [targetId] number "1". If another row already has "1", swap. */
+/** Assign [newNumber] to [targetId]. If another row holds [newNumber], swap atomically. */
+fun assignDemoNumber(
+    channels: MutableList<WalkthroughDemoChannel>,
+    targetId: Int,
+    newNumber: String
+): DemoAssignResult? {
+    val target = channels.find { it.id == targetId } ?: return null
+    val holder = channels.find { it.customNumber == newNumber && it.id != targetId }
+    val previousTargetNum = target.customNumber
+    if (holder != null) {
+        target.customNumber = newNumber
+        holder.customNumber = previousTargetNum
+        return DemoAssignResult(newNumber, holder.name, previousTargetNum)
+    }
+    target.customNumber = newNumber
+    return DemoAssignResult(newNumber, null)
+}
+
+/** Legacy helper for single-digit assign test */
 fun assignDemoNumberOne(
     channels: MutableList<WalkthroughDemoChannel>,
     targetId: Int
-): DemoAssignResult? {
-    val target = channels.find { it.id == targetId } ?: return null
-    val holder = channels.find { it.customNumber == "1" && it.id != targetId }
-    if (holder != null) {
-        val previous = target.customNumber
-        target.customNumber = "1"
-        holder.customNumber = previous
-        return DemoAssignResult("1", holder.name)
-    }
-    target.customNumber = "1"
-    return DemoAssignResult("1", null)
-}
+): DemoAssignResult? = assignDemoNumber(channels, targetId, "1")
 
 fun toggleDemoFavorite(
     channels: MutableList<WalkthroughDemoChannel>,

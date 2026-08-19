@@ -16,6 +16,19 @@
     <string name="btn_save">Save</string>
     <string name="btn_cancel">Cancel</string>
 
+    <!-- Remote Key Mapping -->
+    <string name="settings_keymap_title">Remote Buttons &amp; Keys</string>
+    <string name="settings_keymap_desc">Customize remote buttons for Guide, Zap, Info &amp; Recall</string>
+    <string name="keymap_dialog_title">Customize Remote Controls</string>
+    <string name="keymap_press_hint">Press any button on your remote to map</string>
+    <string name="keymap_btn_reset">Reset to Defaults</string>
+    <string name="key_action_zap_up">Channel Up (Zap)</string>
+    <string name="key_action_zap_down">Channel Down (Zap)</string>
+    <string name="key_action_guide">Open Guide</string>
+    <string name="key_action_info">Info Banner</string>
+    <string name="key_action_recall">Quick Recall</string>
+    <string name="key_action_favorite">Toggle Favorite</string>
+
     <!-- Phase 4 & Phase 5 Strings -->
     <string name="startup_channel_title">Startup Channel</string>
     <string name="startup_mode_last">Last Watched</string>
@@ -75,28 +88,28 @@
     <string name="walkthrough_chip_last">Last ch.</string>
     <string name="walkthrough_phone_caption">Settings → Phone Setup. Same Wi-Fi. The TV hosts a local page — nothing is uploaded.</string>
     <string name="walkthrough_hidden">Hidden · restore in Settings</string>
-    <string name="walkthrough_status_assigned">%1$s is now channel 1</string>
-    <string name="walkthrough_status_swap">Swapped %1$s ↔ %2$s</string>
-    <string name="walkthrough_status_starred">Starred %1$s</string>
+    <string name="walkthrough_status_assigned">%1$s is now channel %2$s</string>
+    <string name="walkthrough_status_swap">Swapped %1$s (#%2$s) ↔ %3$s (#%4$s)</string>
+    <string name="walkthrough_status_starred">Starred %1$s ★</string>
     <string name="walkthrough_status_unstarred">Removed star from %1$s</string>
     <string name="walkthrough_status_hidden">Hidden %1$s</string>
     <string name="walkthrough_status_restored">Restored %1$s</string>
 
     <string-array name="walkthrough_titles">
         <item>Welcome to VividOrbit</item>
-        <item>Watch with the remote</item>
-        <item>Number channels your way</item>
-        <item>Favorites and hidden</item>
-        <item>Edit from your phone</item>
-        <item>You\'re set</item>
+        <item>Remote &amp; Key Controls</item>
+        <item>Custom Channel Numbers</item>
+        <item>Favorites (★) &amp; Quick Filters</item>
+        <item>Lineup Manager on Phone</item>
+        <item>You\'re Ready</item>
     </string-array>
 
     <string-array name="walkthrough_bodies">
-        <item>A lineup manager for the TV you already have. It plays whatever this box\'s tuner scanned. It does not stream the internet and does not replace cable or DTH.</item>
-        <item>Press the keys now — matching chips glow. Up/Down or CH± zap. OK shows now/next. GUIDE or MENU opens the list. Long-press BACK jumps to the last channel.</item>
-        <item>Station names come from the tuner. You assign the numbers you actually remember. OK on a row makes it 1. If 1 is taken, the two channels swap. Settings can auto-renumber 1..N or reset to DTH.</item>
-        <item>OK stars a favorite (filter them in the guide). Left hides a channel from the list — restore it later in Settings.</item>
-        <item>Scan the QR in Settings → Phone Setup on the same Wi-Fi to reorder, renumber, hide, and tune. The server lives on this TV and stops when you close the panel.</item>
-        <item>No accounts, ads, or analytics. If the list is empty, run a channel scan in the system Live TV settings first, then come back.</item>
+        <item>A high-performance live TV lineup manager for your TV\'s built-in tuner. Fast zapping, custom channel numbering, and zero clutter.</item>
+        <item>Press buttons on your remote now to test! Standard keys (CH±, Guide, OK, Recall) work immediately. If your remote has different buttons, you can customize keys anytime in Settings.</item>
+        <item>Assign ANY channel number you prefer (1..9999). When you assign a number already in use, the two channels automatically swap without conflicts. Try clicking below!</item>
+        <item>Star (★) your favorite channels to quickly view them in the [ ★ Favorites ] tab in the Guide. You can also hide channels you don\'t watch and restore them in Settings.</item>
+        <item>Scan the QR code in Settings → Phone Setup from your phone browser on Wi-Fi to reorder channels, import/export backups, and edit names cleanly.</item>
+        <item>Zero ads, no accounts, and 100% offline local playback. Press \'Get Started\' to begin watching!</item>
     </string-array>
 </resources>

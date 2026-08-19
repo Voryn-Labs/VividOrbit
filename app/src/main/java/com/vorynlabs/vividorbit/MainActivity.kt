@@ -29,6 +29,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.vorynlabs.vividorbit.data.Channel
 import com.vorynlabs.vividorbit.data.ChannelRepository
 import com.vorynlabs.vividorbit.data.EpgRepository
+import com.vorynlabs.vividorbit.data.KeyMappingRepository
+import com.vorynlabs.vividorbit.data.RemoteAction
 import com.vorynlabs.vividorbit.data.StartupMode
 import com.vorynlabs.vividorbit.player.TvViewHelper
 import com.vorynlabs.vividorbit.server.LocalConfigServer
@@ -131,6 +133,15 @@ class MainActivity : Activity(), CoroutineScope {
     private lateinit var confirmCancelBtn: TextView
     private lateinit var confirmOkBtn: TextView
     private var pendingConfirmAction: (() -> Unit)? = null
+
+    private lateinit var keyMappingRepository: KeyMappingRepository
+    private lateinit var settingsKeymapRow: View
+    private lateinit var keymapPanelCard: CardView
+    private lateinit var keymapListContainer: LinearLayout
+    private lateinit var keymapHintText: TextView
+    private lateinit var keymapResetBtn: TextView
+    private lateinit var keymapCloseBtn: TextView
+    private var activeMappingAction: RemoteAction? = null
 
     private var localConfigServer: LocalConfigServer? = null
     private var currentSessionToken: String = ""
@@ -261,6 +272,8 @@ class MainActivity : Activity(), CoroutineScope {
         numericEntryText = findViewById(R.id.numeric_entry_text)
         noChannelsText = findViewById(R.id.no_channels_text)
 
+        keyMappingRepository = KeyMappingRepository(this)
+
         settingsContainer = findViewById(R.id.settings_container)
         settingsCloseBtn = findViewById(R.id.settings_close_btn)
         settingsToggleRow = findViewById(R.id.settings_toggle_row)
@@ -270,6 +283,12 @@ class MainActivity : Activity(), CoroutineScope {
         settingsPhoneSetupRow = findViewById(R.id.settings_phone_setup_row)
         settingsAboutRow = findViewById(R.id.settings_about_row)
         settingsWalkthroughRow = findViewById(R.id.settings_walkthrough_row)
+        settingsKeymapRow = findViewById(R.id.settings_keymap_row)
+        keymapPanelCard = findViewById(R.id.keymap_panel_card)
+        keymapListContainer = findViewById(R.id.keymap_list_container)
+        keymapHintText = findViewById(R.id.keymap_hint_text)
+        keymapResetBtn = findViewById(R.id.keymap_reset_btn)
+        keymapCloseBtn = findViewById(R.id.keymap_close_btn)
         settingsBannerRow = findViewById(R.id.settings_banner_row)
         settingsBannerSubtitle = findViewById(R.id.settings_banner_subtitle)
         settingsGuideHideRow = findViewById(R.id.settings_guide_hide_row)
@@ -377,6 +396,20 @@ class MainActivity : Activity(), CoroutineScope {
 
         settingsWalkthroughRow.setOnClickListener {
             showWalkthrough()
+        }
+
+        settingsKeymapRow.setOnClickListener {
+            openKeyMapper()
+        }
+
+        keymapResetBtn.setOnClickListener {
+            keyMappingRepository.resetDefaults()
+            renderKeyMapRows()
+            Toast.makeText(this, "Reset remote keys to defaults", Toast.LENGTH_SHORT).show()
+        }
+
+        keymapCloseBtn.setOnClickListener {
+            closeKeyMapper()
         }
 
         settingsBannerRow.setOnClickListener {
@@ -892,6 +925,60 @@ class MainActivity : Activity(), CoroutineScope {
         resetSidebarTimer()
     }
 
+    private fun openKeyMapper() {
+        activeMappingAction = null
+        keymapHintText.text = getString(R.string.keymap_press_hint)
+        renderKeyMapRows()
+        keymapPanelCard.visibility = View.VISIBLE
+        keymapResetBtn.requestFocus()
+        resetSidebarTimer()
+    }
+
+    private fun closeKeyMapper() {
+        activeMappingAction = null
+        keymapPanelCard.visibility = View.GONE
+        settingsKeymapRow.requestFocus()
+        resetSidebarTimer()
+    }
+
+    private fun renderKeyMapRows() {
+        keymapListContainer.removeAllViews()
+        val density = resources.displayMetrics.density
+        RemoteAction.values().forEach { action ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding((12 * density).toInt(), (8 * density).toInt(), (12 * density).toInt(), (8 * density).toInt())
+                isFocusable = true
+                isClickable = true
+                background = resources.getDrawable(R.drawable.item_background_selector, null)
+                setOnClickListener {
+                    activeMappingAction = action
+                    keymapHintText.text = "Press ANY remote button now to map for [${action.title}]..."
+                    renderKeyMapRows()
+                }
+            }
+
+            val label = TextView(this).apply {
+                text = action.title
+                setTextColor(resources.getColor(R.color.text_primary, null))
+                textSize = 14f
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+
+            val isBeingMapped = activeMappingAction == action
+            val value = TextView(this).apply {
+                text = if (isBeingMapped) "▶ Press Button..." else keyMappingRepository.getActionDisplayName(action).substringAfter(": ")
+                setTextColor(resources.getColor(if (isBeingMapped) R.color.accent else R.color.text_secondary, null))
+                textSize = 13f
+            }
+
+            row.addView(label)
+            row.addView(value)
+            keymapListContainer.addView(row)
+        }
+    }
+
     private fun openAboutUs() {
         try {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(ABOUT_US_URL))
@@ -1220,6 +1307,7 @@ class MainActivity : Activity(), CoroutineScope {
     private fun isAnyMenuVisible(): Boolean {
         return (::sidebarContainer.isInitialized && sidebarContainer.visibility == View.VISIBLE) ||
                 (::settingsContainer.isInitialized && settingsContainer.visibility == View.VISIBLE) ||
+                (::keymapPanelCard.isInitialized && keymapPanelCard.visibility == View.VISIBLE) ||
                 (::editNumberCard.isInitialized && editNumberCard.visibility == View.VISIBLE) ||
                 (::startupPickerCard.isInitialized && startupPickerCard.visibility == View.VISIBLE) ||
                 (::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE) ||
@@ -1485,6 +1573,29 @@ class MainActivity : Activity(), CoroutineScope {
             }
         }
 
+        if (::keymapPanelCard.isInitialized && keymapPanelCard.visibility == View.VISIBLE) {
+            if (activeMappingAction != null) {
+                if (keyCode == KeyEvent.KEYCODE_BACK) {
+                    activeMappingAction = null
+                    keymapHintText.text = getString(R.string.keymap_press_hint)
+                    renderKeyMapRows()
+                    return true
+                }
+                val action = activeMappingAction!!
+                keyMappingRepository.setCustomKey(action, keyCode)
+                val keyName = keyMappingRepository.getKeyDisplayName(keyCode)
+                Toast.makeText(this, "Mapped $keyName to ${action.title}", Toast.LENGTH_SHORT).show()
+                activeMappingAction = null
+                keymapHintText.text = getString(R.string.keymap_press_hint)
+                renderKeyMapRows()
+                return true
+            }
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                closeKeyMapper()
+                return true
+            }
+        }
+
         if (::numericEntryCard.isInitialized && numericEntryCard.visibility == View.VISIBLE) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
                 numericHandler.removeCallbacks(tuneRunnable)
@@ -1500,13 +1611,13 @@ class MainActivity : Activity(), CoroutineScope {
         }
 
         // Quick Recall Keys
-        if (keyCode == KeyEvent.KEYCODE_LAST_CHANNEL || keyCode == KeyEvent.KEYCODE_MEDIA_PREVIOUS) {
+        if (keyMappingRepository.matches(RemoteAction.QUICK_RECALL, keyCode)) {
             recallPreviousChannel()
             return true
         }
 
-        // Favorite Toggle Keys (Yellow or Blue TV remote buttons)
-        if (keyCode == KeyEvent.KEYCODE_PROG_YELLOW || keyCode == KeyEvent.KEYCODE_PROG_BLUE) {
+        // Favorite Toggle Keys
+        if (keyMappingRepository.matches(RemoteAction.TOGGLE_FAVORITE, keyCode)) {
             selectedChannel?.let { ch ->
                 val isNowFav = repository.toggleFavorite(ch.id)
                 channelAdapter.notifyFavoriteChanged(ch.id)
@@ -1526,13 +1637,13 @@ class MainActivity : Activity(), CoroutineScope {
             return true
         }
 
-        if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+        if (keyMappingRepository.matches(RemoteAction.ZAP_UP, keyCode)) {
             if (!isAnyMenuVisible()) {
                 browseBanner(1)
                 return true
             }
         }
-        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+        if (keyMappingRepository.matches(RemoteAction.ZAP_DOWN, keyCode)) {
             if (!isAnyMenuVisible()) {
                 browseBanner(-1)
                 return true
@@ -1561,7 +1672,7 @@ class MainActivity : Activity(), CoroutineScope {
             }
         }
 
-        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+        if (keyMappingRepository.matches(RemoteAction.INFO_BANNER, keyCode)) {
             if (!isAnyMenuVisible()) {
                 val preview = previewChannel
                 if (preview != null && preview.id != selectedChannel?.id) {
@@ -1573,7 +1684,7 @@ class MainActivity : Activity(), CoroutineScope {
             }
         }
 
-        if (keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_GUIDE) {
+        if (keyMappingRepository.matches(RemoteAction.OPEN_GUIDE, keyCode)) {
             if (!isAnyMenuVisible()) {
                 showSidebar()
                 return true
@@ -1601,6 +1712,7 @@ class MainActivity : Activity(), CoroutineScope {
                 }
                 ::channelProgramsCard.isInitialized && channelProgramsCard.visibility == View.VISIBLE -> closeChannelPrograms()
                 ::confirmActionCard.isInitialized && confirmActionCard.visibility == View.VISIBLE -> closeConfirmation()
+                ::keymapPanelCard.isInitialized && keymapPanelCard.visibility == View.VISIBLE -> closeKeyMapper()
                 ::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE -> closePhoneSetup()
                 ::startupPickerCard.isInitialized && startupPickerCard.visibility == View.VISIBLE -> closeStartupPicker()
                 ::editNumberCard.isInitialized && editNumberCard.visibility == View.VISIBLE -> closeEditNumberDialog()
