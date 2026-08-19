@@ -86,10 +86,10 @@ class WalkthroughTest {
         val channels = seedDemoChannels()
         assignDemoNumberOne(channels, 1)
         val result = assignDemoNumberOne(channels, 2)!!
-        assertEquals("Sony SAB HD", channels[1].name)
+        assertEquals("National Geographic", channels[1].name)
         assertEquals("1", channels[1].customNumber)
         assertEquals("201", channels[0].customNumber)
-        assertEquals("Zee TV HD", result.swappedWith)
+        assertEquals("Discovery Channel", result.swappedWith)
     }
 
     @Test

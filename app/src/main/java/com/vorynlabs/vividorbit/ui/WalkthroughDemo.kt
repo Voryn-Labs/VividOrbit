@@ -35,9 +35,9 @@ fun isRemotePage(page: Int): Boolean = page == 1
 fun isPhonePage(page: Int): Boolean = page == 4
 
 fun seedDemoChannels(): MutableList<WalkthroughDemoChannel> = mutableListOf(
-    WalkthroughDemoChannel(1, "Zee TV HD", "104", "104"),
-    WalkthroughDemoChannel(2, "Sony SAB HD", "201", "201"),
-    WalkthroughDemoChannel(3, "DD News", "12", "12")
+    WalkthroughDemoChannel(1, "Discovery Channel", "104", "104"),
+    WalkthroughDemoChannel(2, "National Geographic", "201", "201"),
+    WalkthroughDemoChannel(3, "CNN International", "12", "12")
 )
 
 /** Assign [newNumber] to [targetId]. If another row holds [newNumber], swap atomically. */

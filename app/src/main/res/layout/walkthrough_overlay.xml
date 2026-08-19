@@ -131,6 +131,17 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
+                <TextView
+                    android:id="@+id/walkthrough_no_channels"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:padding="20dp"
+                    android:text="Channel data not available"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp"
+                    android:visibility="gone" />
+
                 <include
                     android:id="@+id/walkthrough_demo_row_0"
                     layout="@layout/walkthrough_demo_row" />
@@ -153,17 +164,12 @@
                 android:orientation="horizontal"
                 android:visibility="gone">
 
-                <FrameLayout
+                <ImageView
                     android:layout_width="88dp"
                     android:layout_height="88dp"
-                    android:background="@drawable/walkthrough_qr_frame">
-
-                    <View
-                        android:layout_width="52dp"
-                        android:layout_height="52dp"
-                        android:layout_gravity="center"
-                        android:background="@color/hairline" />
-                </FrameLayout>
+                    android:src="@drawable/logo"
+                    android:scaleType="centerInside"
+                    android:alpha="0.8" />
 
                 <TextView
                     android:layout_width="0dp"

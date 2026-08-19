@@ -1400,7 +1400,7 @@ class MainActivity : Activity(), CoroutineScope {
     }
 
     private fun showWalkthrough() {
-        walkthroughController.show()
+        walkthroughController.show(allChannels)
     }
 
     override fun onKeyLongPress(keyCode: Int, event: KeyEvent): Boolean {

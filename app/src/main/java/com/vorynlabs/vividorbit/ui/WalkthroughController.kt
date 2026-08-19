@@ -49,9 +49,18 @@ class WalkthroughController(
         }
     }
 
-    fun show() {
+    fun show(actualChannels: List<com.vorynlabs.vividorbit.data.Channel>) {
         currentPage = 0
-        channels = seedDemoChannels()
+        channels = actualChannels.take(3).map { ch ->
+            WalkthroughDemoChannel(
+                id = ch.id.toInt(),
+                name = ch.displayName,
+                dthNumber = ch.originalDisplayNumber,
+                customNumber = ch.customDisplayNumber ?: ch.originalDisplayNumber,
+                favorite = false,
+                hidden = false
+            )
+        }.toMutableList()
         demoAssignNumberIndex = 0
         litChips.clear()
         overlay.visibility = View.VISIBLE
@@ -130,18 +139,30 @@ class WalkthroughController(
     }
 
     private fun bindDemoRows() {
+        val noChannelsText: TextView = overlay.findViewById(R.id.walkthrough_no_channels)
+        if (channels.isEmpty()) {
+            noChannelsText.visibility = View.VISIBLE
+            demoRows.forEach { it.visibility = View.GONE }
+            return
+        }
+        noChannelsText.visibility = View.GONE
         demoRows.forEachIndexed { index, row ->
-            val channel = channels[index]
-            row.findViewById<TextView>(R.id.demo_number).text = channel.customNumber
-            row.findViewById<TextView>(R.id.demo_name).text = channel.name
-            val caption = row.findViewById<TextView>(R.id.demo_caption)
-            caption.text = when {
-                channel.hidden -> overlay.context.getString(R.string.walkthrough_hidden)
-                else -> overlay.context.getString(R.string.dth_format, channel.dthNumber)
+            if (index < channels.size) {
+                row.visibility = View.VISIBLE
+                val channel = channels[index]
+                row.findViewById<TextView>(R.id.demo_number).text = channel.customNumber
+                row.findViewById<TextView>(R.id.demo_name).text = channel.name
+                val caption = row.findViewById<TextView>(R.id.demo_caption)
+                caption.text = when {
+                    channel.hidden -> overlay.context.getString(R.string.walkthrough_hidden)
+                    else -> overlay.context.getString(R.string.dth_format, channel.dthNumber)
+                }
+                row.findViewById<TextView>(R.id.demo_star).visibility =
+                    if (channel.favorite) View.VISIBLE else View.GONE
+                row.alpha = if (channel.hidden) 0.45f else 1f
+            } else {
+                row.visibility = View.GONE
             }
-            row.findViewById<TextView>(R.id.demo_star).visibility =
-                if (channel.favorite) View.VISIBLE else View.GONE
-            row.alpha = if (channel.hidden) 0.45f else 1f
         }
     }
 
@@ -173,37 +194,11 @@ class WalkthroughController(
     }
 
     private fun onDemoActivated(index: Int) {
-        val channel = channels[index]
-        if (currentPage == 2) {
-            val numToAssign = demoNumbersToAssign[demoAssignNumberIndex % demoNumbersToAssign.size]
-            demoAssignNumberIndex++
-            val result = assignDemoNumber(channels, channel.id, numToAssign) ?: return
-            statusView.visibility = View.VISIBLE
-            statusView.text = if (result.swappedWith != null) {
-                overlay.context.getString(
-                    R.string.walkthrough_status_swap,
-                    channel.name,
-                    result.assignedNumber,
-                    result.swappedWith,
-                    result.swappedNumber ?: ""
-                )
-            } else {
-                overlay.context.getString(
-                    R.string.walkthrough_status_assigned,
-                    channel.name,
-                    result.assignedNumber
-                )
-            }
-            bindDemoRows()
-        } else if (currentPage == 3) {
-            val starred = toggleDemoFavorite(channels, channel.id)
-            statusView.visibility = View.VISIBLE
-            statusView.text = overlay.context.getString(
-                if (starred) R.string.walkthrough_status_starred else R.string.walkthrough_status_unstarred,
-                channel.name
-            )
-            bindDemoRows()
-        }
+        android.widget.Toast.makeText(
+            overlay.context,
+            "Configure this in Settings.",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
     }
 
     private fun hideStatus() {
