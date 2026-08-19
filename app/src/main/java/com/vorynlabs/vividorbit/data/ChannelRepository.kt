@@ -44,6 +44,7 @@ class ChannelRepository(private val context: Context) {
         private const val PREF_GUIDE_AUTOHIDE_MS = "guide_autohide_ms"
         private const val PREF_GUIDE_PROGRAM_TITLES = "guide_program_titles"
         private const val PREF_HIDDEN_JSON = "hidden_channel_ids_json"
+        private const val PREF_WALKTHROUGH_SEEN = "walkthrough_seen"
         private val BANNER_HIDE_OPTIONS = longArrayOf(3000L, 6000L, 10000L)
         private val GUIDE_HIDE_OPTIONS = longArrayOf(10000L, 20000L, 0L)
     }
@@ -178,6 +179,16 @@ class ChannelRepository(private val context: Context) {
         val array = JSONArray()
         ids.forEach { array.put(it) }
         prefs.edit().putString(PREF_HIDDEN_JSON, array.toString()).apply()
+    }
+
+    @Synchronized
+    fun hasSeenWalkthrough(): Boolean {
+        return prefs.getBoolean(PREF_WALKTHROUGH_SEEN, false)
+    }
+
+    @Synchronized
+    fun setWalkthroughSeen(seen: Boolean = true) {
+        prefs.edit().putBoolean(PREF_WALKTHROUGH_SEEN, seen).apply()
     }
 
     @Synchronized

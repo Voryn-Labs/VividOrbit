@@ -449,6 +449,52 @@
                 android:textSize="20sp" />
         </LinearLayout>
 
+        <!-- How to use Row -->
+        <LinearLayout
+            android:id="@+id/settings_walkthrough_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="14dp"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="6dp"
+            android:layout_marginBottom="6dp"
+            android:focusable="true"
+            android:clickable="true"
+            android:background="@drawable/item_background_selector">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_walkthrough_title"
+                    android:textColor="@color/text_primary"
+                    android:fontFamily="sans-serif-medium"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="@string/settings_walkthrough_desc"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="›"
+                android:textColor="@color/accent"
+                android:textSize="20sp" />
+        </LinearLayout>
+
         <LinearLayout
             android:id="@+id/settings_banner_row"
             android:layout_width="match_parent"
@@ -1341,5 +1387,8 @@
                 android:text="OK to watch · Back to close" />
         </LinearLayout>
     </androidx.cardview.widget.CardView>
+
+    <!-- First-run Walkthrough Overlay (highest z) -->
+    <include layout="@layout/walkthrough_overlay" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

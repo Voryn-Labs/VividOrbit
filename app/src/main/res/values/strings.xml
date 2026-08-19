@@ -54,4 +54,49 @@
     <string name="btn_confirm">Confirm</string>
     <string name="accessibility_channel_format">Channel %1$s, %2$s</string>
     <string name="accessibility_channel_with_epg_format">Channel %1$s, %2$s, now playing %3$s</string>
+
+    <!-- Play Store Compliance Strings -->
+    <string name="settings_privacy_title">Privacy Policy</string>
+    <string name="settings_privacy_desc">How we handle your data</string>
+    <string name="settings_contact_title">Contact &amp; Support</string>
+    <string name="settings_contact_desc">appsvorynlabs@gmail.com</string>
+    <string name="about_version_format">Version %1$s</string>
+
+    <!-- First-run Walkthrough -->
+    <string name="settings_walkthrough_title">How to use</string>
+    <string name="settings_walkthrough_desc">Replay the first-run walkthrough</string>
+    <string name="walkthrough_skip">Skip</string>
+    <string name="walkthrough_back">Back</string>
+    <string name="walkthrough_next">Next</string>
+    <string name="walkthrough_get_started">Get started</string>
+    <string name="walkthrough_chip_zap">Zap ↑↓</string>
+    <string name="walkthrough_chip_info">OK info</string>
+    <string name="walkthrough_chip_guide">Guide</string>
+    <string name="walkthrough_chip_last">Last ch.</string>
+    <string name="walkthrough_phone_caption">Settings → Phone Setup. Same Wi-Fi. The TV hosts a local page — nothing is uploaded.</string>
+    <string name="walkthrough_hidden">Hidden · restore in Settings</string>
+    <string name="walkthrough_status_assigned">%1$s is now channel 1</string>
+    <string name="walkthrough_status_swap">Swapped %1$s ↔ %2$s</string>
+    <string name="walkthrough_status_starred">Starred %1$s</string>
+    <string name="walkthrough_status_unstarred">Removed star from %1$s</string>
+    <string name="walkthrough_status_hidden">Hidden %1$s</string>
+    <string name="walkthrough_status_restored">Restored %1$s</string>
+
+    <string-array name="walkthrough_titles">
+        <item>Welcome to VividOrbit</item>
+        <item>Watch with the remote</item>
+        <item>Number channels your way</item>
+        <item>Favorites and hidden</item>
+        <item>Edit from your phone</item>
+        <item>You\'re set</item>
+    </string-array>
+
+    <string-array name="walkthrough_bodies">
+        <item>A lineup manager for the TV you already have. It plays whatever this box\'s tuner scanned. It does not stream the internet and does not replace cable or DTH.</item>
+        <item>Press the keys now — matching chips glow. Up/Down or CH± zap. OK shows now/next. GUIDE or MENU opens the list. Long-press BACK jumps to the last channel.</item>
+        <item>Station names come from the tuner. You assign the numbers you actually remember. OK on a row makes it 1. If 1 is taken, the two channels swap. Settings can auto-renumber 1..N or reset to DTH.</item>
+        <item>OK stars a favorite (filter them in the guide). Left hides a channel from the list — restore it later in Settings.</item>
+        <item>Scan the QR in Settings → Phone Setup on the same Wi-Fi to reorder, renumber, hide, and tune. The server lives on this TV and stops when you close the panel.</item>
+        <item>No accounts, ads, or analytics. If the list is empty, run a channel scan in the system Live TV settings first, then come back.</item>
+    </string-array>
 </resources>

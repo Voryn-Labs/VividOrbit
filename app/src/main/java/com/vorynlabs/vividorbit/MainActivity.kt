@@ -37,6 +37,7 @@ import com.vorynlabs.vividorbit.server.QrCodeGenerator
 import com.vorynlabs.vividorbit.ui.ChannelAdapter
 import com.vorynlabs.vividorbit.ui.ChannelLogoLoader
 import com.vorynlabs.vividorbit.ui.ChannelSettingsAdapter
+import com.vorynlabs.vividorbit.ui.WalkthroughController
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -83,6 +84,7 @@ class MainActivity : Activity(), CoroutineScope {
     private lateinit var settingsStartupSubtitle: TextView
     private lateinit var settingsPhoneSetupRow: View
     private lateinit var settingsAboutRow: View
+    private lateinit var settingsWalkthroughRow: View
     private lateinit var settingsBannerRow: View
     private lateinit var settingsBannerSubtitle: TextView
     private lateinit var settingsGuideHideRow: View
@@ -147,6 +149,9 @@ class MainActivity : Activity(), CoroutineScope {
     private lateinit var programsTitle: TextView
     private lateinit var programsSubtitle: TextView
     private lateinit var programsContainer: LinearLayout
+
+    private lateinit var walkthroughOverlay: View
+    private lateinit var walkthroughController: WalkthroughController
 
     private val bannerHandler = Handler(Looper.getMainLooper())
     private var pendingBannerChannel: Channel? = null
@@ -215,7 +220,9 @@ class MainActivity : Activity(), CoroutineScope {
         private const val PERMISSION_REQUEST_CODE = 1010
         private const val ZAP_DEBOUNCE_MS = 80L
         private const val EPG_FETCH_DEBOUNCE_MS = 300L
-        private const val ABOUT_US_URL = "https://voryn-labs.github.io/vorynlabs-games/"
+        private const val ABOUT_US_URL = "https://voryn-labs.github.io/"
+        private const val PRIVACY_POLICY_URL = "https://voryn-labs.github.io/privacy.html"
+        private const val CONTACT_EMAIL = "appsvorynlabs@gmail.com"
 
         private const val SIDEBAR_AUTO_HIDE_MS = 20000L
         private const val BANNER_AUTO_HIDE_MS = 6000L
@@ -260,6 +267,7 @@ class MainActivity : Activity(), CoroutineScope {
         settingsStartupSubtitle = findViewById(R.id.settings_startup_subtitle)
         settingsPhoneSetupRow = findViewById(R.id.settings_phone_setup_row)
         settingsAboutRow = findViewById(R.id.settings_about_row)
+        settingsWalkthroughRow = findViewById(R.id.settings_walkthrough_row)
         settingsBannerRow = findViewById(R.id.settings_banner_row)
         settingsBannerSubtitle = findViewById(R.id.settings_banner_subtitle)
         settingsGuideHideRow = findViewById(R.id.settings_guide_hide_row)
@@ -315,9 +323,22 @@ class MainActivity : Activity(), CoroutineScope {
         programsSubtitle = findViewById(R.id.programs_subtitle)
         programsContainer = findViewById(R.id.programs_container)
 
+        walkthroughOverlay = findViewById(R.id.walkthrough_overlay)
+        walkthroughController = WalkthroughController(
+            overlay = walkthroughOverlay,
+            onFinish = {
+                repository.setWalkthroughSeen()
+                walkthroughController.hide()
+            }
+        )
+
         repository = ChannelRepository(this)
         epgRepository = EpgRepository(this)
         previousChannelId = repository.getPreviousChannelId().takeIf { it != -1L }
+
+        if (!repository.hasSeenWalkthrough()) {
+            showWalkthrough()
+        }
 
         sidebarSettingsBtn.setOnClickListener {
             openSettings()
@@ -350,6 +371,10 @@ class MainActivity : Activity(), CoroutineScope {
 
         settingsAboutRow.setOnClickListener {
             openAboutUs()
+        }
+
+        settingsWalkthroughRow.setOnClickListener {
+            showWalkthrough()
         }
 
         settingsBannerRow.setOnClickListener {
@@ -1197,7 +1222,8 @@ class MainActivity : Activity(), CoroutineScope {
                 (::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE) ||
                 (::confirmActionCard.isInitialized && confirmActionCard.visibility == View.VISIBLE) ||
                 (::channelProgramsCard.isInitialized && channelProgramsCard.visibility == View.VISIBLE) ||
-                (::numericEntryCard.isInitialized && numericEntryCard.visibility == View.VISIBLE)
+                (::numericEntryCard.isInitialized && numericEntryCard.visibility == View.VISIBLE) ||
+                (::walkthroughOverlay.isInitialized && walkthroughOverlay.visibility == View.VISIBLE)
     }
 
     private fun tuneToChannelNumber(number: String) {
@@ -1225,6 +1251,7 @@ class MainActivity : Activity(), CoroutineScope {
     private fun resetSidebarTimer() {
         sidebarHandler.removeCallbacks(hideSidebarRunnable)
         if (::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE) return
+        if (::walkthroughOverlay.isInitialized && walkthroughOverlay.visibility == View.VISIBLE) return
         val hideMs = repository.getGuideAutoHideMs()
         if (hideMs > 0L && isAnyMenuVisible()) {
             sidebarHandler.postDelayed(hideSidebarRunnable, hideMs)
@@ -1281,6 +1308,10 @@ class MainActivity : Activity(), CoroutineScope {
         sidebarHandler.removeCallbacks(hideSidebarRunnable)
     }
 
+    private fun showWalkthrough() {
+        walkthroughController.show()
+    }
+
     override fun onKeyLongPress(keyCode: Int, event: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK && !isAnyMenuVisible()) {
             backLongPressHandled = true
@@ -1292,6 +1323,10 @@ class MainActivity : Activity(), CoroutineScope {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         resetSidebarTimer()
+
+        if (::walkthroughController.isInitialized && walkthroughController.handleKey(keyCode)) {
+            return true
+        }
 
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             event.startTracking()
@@ -1551,6 +1586,9 @@ class MainActivity : Activity(), CoroutineScope {
                 return true
             }
             when {
+                ::walkthroughController.isInitialized && walkthroughController.isVisible() -> {
+                    // BACK already handled in onKeyDown; nothing to close here.
+                }
                 ::channelProgramsCard.isInitialized && channelProgramsCard.visibility == View.VISIBLE -> closeChannelPrograms()
                 ::confirmActionCard.isInitialized && confirmActionCard.visibility == View.VISIBLE -> closeConfirmation()
                 ::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE -> closePhoneSetup()

@@ -21,4 +21,5 @@
     <color name="toggle_on_green">#34D399</color>
     <color name="badge_dth_bg">#121A22</color>
     <color name="star_gold">#FBBF24</color>
+    <color name="launch_background_color">#161614</color>
 </resources>

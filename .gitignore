@@ -27,3 +27,7 @@ local.properties
 
 # Local baseline snapshots
 _baseline_backups/
+
+# Keystore & signing
+keystore/
+keystore.properties
