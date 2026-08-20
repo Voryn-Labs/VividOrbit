@@ -44,6 +44,9 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
+            if (keystorePropertiesFile.exists() && (System.getenv("VIVIDORBIT_STORE_PASSWORD") || keystoreProperties['storePassword'])) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
         }
     }
