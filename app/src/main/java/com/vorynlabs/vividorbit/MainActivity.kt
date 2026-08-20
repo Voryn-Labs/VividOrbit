@@ -1916,24 +1916,15 @@ class MainActivity : Activity(), CoroutineScope {
             return true
         }
 
-        if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP) {
-            navigateChannel(1, event.repeatCount > 0)
-            return true
-        }
-        if (keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN) {
-            navigateChannel(-1, event.repeatCount > 0)
-            return true
-        }
-
-        if (keyMappingRepository.matches(RemoteAction.ZAP_UP, keyCode)) {
+        if (keyMappingRepository.matches(RemoteAction.ZAP_UP, keyCode) || keyCode == KeyEvent.KEYCODE_CHANNEL_UP) {
             if (!isAnyMenuVisible()) {
-                browseBanner(1)
+                navigateChannel(1, event.repeatCount > 0)
                 return true
             }
         }
-        if (keyMappingRepository.matches(RemoteAction.ZAP_DOWN, keyCode)) {
+        if (keyMappingRepository.matches(RemoteAction.ZAP_DOWN, keyCode) || keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN) {
             if (!isAnyMenuVisible()) {
-                browseBanner(-1)
+                navigateChannel(-1, event.repeatCount > 0)
                 return true
             }
         }
