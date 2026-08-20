@@ -10,5 +10,6 @@ data class Channel(
     val displayName: String,
     val inputId: String,
     val logoUri: Uri? = null,
-    val genre: String = ""
+    val genre: String = "",
+    val isHidden: Boolean = false
 )

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Adaptive icon foreground: insets the full-bleed launcher art so the visible
+    logo fits inside the 66dp safe-zone circle (33dp radius on the 108dp canvas).
+    22% per side keeps the content at 56% of the canvas — within the ~61.1%
+    safe zone — while the crisp mark stays large enough to read clearly.
+    Fractional insets are supported in InsetDrawable on API 26+.
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:inset="22%"
+    android:drawable="@mipmap/ic_launcher" />

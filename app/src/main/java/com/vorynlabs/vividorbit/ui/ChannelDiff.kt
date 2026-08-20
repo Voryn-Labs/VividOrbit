@@ -13,7 +13,9 @@ fun channelDiff(oldList: List<Channel>, newList: List<Channel>): DiffUtil.Callba
         }
 
         override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-            return oldList[oldItemPosition] == newList[newItemPosition]
+            val old = oldList[oldItemPosition]
+            val new = newList[newItemPosition]
+            return old == new && old.isHidden == new.isHidden
         }
     }
 }

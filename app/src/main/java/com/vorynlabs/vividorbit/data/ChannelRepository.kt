@@ -367,7 +367,8 @@ class ChannelRepository(private val context: Context) {
                         displayName = item.getString("name"),
                         inputId = item.getString("inputId"),
                         logoUri = logoUri,
-                        genre = item.optString("genre", "")
+                        genre = item.optString("genre", ""),
+                        isHidden = isHidden(item.getLong("id"))
                     )
                 )
             }
@@ -420,7 +421,7 @@ class ChannelRepository(private val context: Context) {
             }
 
             if (id != -1L && channels.none { it.id == id }) {
-                channels.add(Channel(id, number, null, number, name, resolvedInputId, logoUri, channelGenreLabel(broadcastGenre)))
+                channels.add(Channel(id, number, null, number, name, resolvedInputId, logoUri, channelGenreLabel(broadcastGenre), isHidden = isHidden(id)))
             }
         }
     }

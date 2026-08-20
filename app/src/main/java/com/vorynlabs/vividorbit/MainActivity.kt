@@ -221,7 +221,7 @@ class MainActivity : Activity(), CoroutineScope {
     private var pendingZapChannel: Channel? = null
     private val zapHandler = Handler(Looper.getMainLooper())
     private val zapTuneRunnable = Runnable {
-        pendingZapChannel?.let { tuneToChannel(it) }
+        pendingZapChannel?.let { performTune(it) }
     }
 
     private lateinit var channelAdapter: ChannelAdapter
@@ -1276,7 +1276,7 @@ class MainActivity : Activity(), CoroutineScope {
             repository.setPreviousChannelId(current.id)
         }
 
-        pendingZapChannel = null
+        pendingZapChannel = channel
         selectedChannel = channel
         hasRevertedToPrevious = false
         repository.setLastChannelId(channel.id)
@@ -1285,6 +1285,11 @@ class MainActivity : Activity(), CoroutineScope {
 
         channelAdapter.setCurrentChannel(channel.id)
 
+        zapHandler.removeCallbacks(zapTuneRunnable)
+        zapHandler.postDelayed(zapTuneRunnable, ZAP_DEBOUNCE_MS)
+    }
+
+    private fun performTune(channel: Channel) {
         if (tvViewHelper.isTunedTo(channel.id)) {
             return
         }
