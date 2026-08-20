@@ -2,26 +2,34 @@ package com.vorynlabs.vividorbit
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.BroadcastReceiver
 import android.content.ComponentCallbacks2
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.media.tv.TvContract
 import android.media.tv.TvInputManager
 import android.media.tv.TvView
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.KeyEvent
+import android.view.PixelCopy
 import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import java.io.File
+import java.io.FileOutputStream
 
 import androidx.cardview.widget.CardView
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -257,7 +265,7 @@ class MainActivity : Activity(), CoroutineScope {
         private const val ZAP_DEBOUNCE_MS = 80L
         private const val EPG_FETCH_DEBOUNCE_MS = 300L
         private const val ABOUT_US_URL = "https://voryn-labs.github.io/"
-        private const val PRIVACY_POLICY_URL = "https://voryn-labs.github.io/privacy.html"
+        private const val PRIVACY_POLICY_URL = "https://voryn-labs.github.io/vividorbit-privacy.html"
         private const val CONTACT_EMAIL = "appsvorynlabs@gmail.com"
 
         private const val SIDEBAR_AUTO_HIDE_MS = 20000L
@@ -272,11 +280,45 @@ class MainActivity : Activity(), CoroutineScope {
         private const val GENRE_GENERAL = "General"
     }
 
+    private val screenshotReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val name = intent?.getStringExtra("filename") ?: "screenshot_${System.currentTimeMillis()}.png"
+            captureScreenshot(name)
+        }
+    }
+
+    private fun captureScreenshot(fileName: String) {
+        val decorView = window.decorView
+        if (decorView.width <= 0 || decorView.height <= 0) return
+        val bitmap = Bitmap.createBitmap(decorView.width, decorView.height, Bitmap.Config.ARGB_8888)
+        PixelCopy.request(window, bitmap, { copyResult ->
+            if (copyResult == PixelCopy.SUCCESS) {
+                try {
+                    val file = File(getExternalFilesDir(null), fileName)
+                    FileOutputStream(file).use { out ->
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    }
+                    Log.i("MainActivity", "Screenshot successfully saved to ${file.absolutePath}")
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Failed to save screenshot: ${e.message}")
+                }
+            } else {
+                Log.e("MainActivity", "PixelCopy failed with error code $copyResult")
+            }
+        }, Handler(Looper.getMainLooper()))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         job = SupervisorJob()
         setContentView(R.layout.activity_main)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(screenshotReceiver, IntentFilter("com.vorynlabs.vividorbit.ACTION_SCREENSHOT"), Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(screenshotReceiver, IntentFilter("com.vorynlabs.vividorbit.ACTION_SCREENSHOT"))
+        }
 
         mediaSession = MediaSession(this, "VividOrbitLiveTv")
         mediaSession.isActive = true
@@ -2057,6 +2099,9 @@ class MainActivity : Activity(), CoroutineScope {
             tvViewHelper.cleanup()
             tvViewHelper.reset()
         }
+        try {
+            unregisterReceiver(screenshotReceiver)
+        } catch (e: Exception) { }
         super.onDestroy()
     }
 }
