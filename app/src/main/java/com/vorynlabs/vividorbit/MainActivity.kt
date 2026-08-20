@@ -32,6 +32,7 @@ import java.io.File
 import java.io.FileOutputStream
 
 import androidx.cardview.widget.CardView
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.vorynlabs.vividorbit.data.Channel
@@ -314,11 +315,12 @@ class MainActivity : Activity(), CoroutineScope {
         job = SupervisorJob()
         setContentView(R.layout.activity_main)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(screenshotReceiver, IntentFilter("com.vorynlabs.vividorbit.ACTION_SCREENSHOT"), Context.RECEIVER_EXPORTED)
-        } else {
-            registerReceiver(screenshotReceiver, IntentFilter("com.vorynlabs.vividorbit.ACTION_SCREENSHOT"))
-        }
+        ContextCompat.registerReceiver(
+            this,
+            screenshotReceiver,
+            IntentFilter("com.vorynlabs.vividorbit.ACTION_SCREENSHOT"),
+            ContextCompat.RECEIVER_EXPORTED
+        )
 
         mediaSession = MediaSession(this, "VividOrbitLiveTv")
         mediaSession.isActive = true
