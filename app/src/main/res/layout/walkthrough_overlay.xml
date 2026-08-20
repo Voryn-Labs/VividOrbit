@@ -3,117 +3,77 @@
     android:id="@+id/walkthrough_overlay"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_dark"
-    android:paddingStart="72dp"
-    android:paddingEnd="72dp"
-    android:paddingTop="40dp"
-    android:paddingBottom="36dp"
+    android:background="@android:color/transparent"
+    android:focusable="true"
+    android:paddingStart="48dp"
+    android:paddingEnd="48dp"
+    android:paddingTop="27dp"
+    android:paddingBottom="27dp"
     android:visibility="gone">
 
     <LinearLayout
-        android:layout_width="560dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:orientation="vertical">
+        android:layout_gravity="bottom|center_horizontal"
+        android:background="@drawable/walkthrough_card_bg"
+        android:orientation="vertical"
+        android:padding="24dp">
 
-        <ImageView
-            android:id="@+id/walkthrough_logo"
-            android:layout_width="72dp"
-            android:layout_height="72dp"
-            android:layout_gravity="center_horizontal"
-            android:contentDescription="@string/app_name"
-            android:src="@mipmap/ic_launcher" />
-
-        <TextView
-            android:id="@+id/walkthrough_kicker"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="22dp"
-            android:fontFamily="sans-serif-medium"
-            android:gravity="center"
-            android:letterSpacing="0.16"
-            android:textColor="@color/accent"
-            android:textSize="11sp" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/walkthrough_logo"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:contentDescription="@string/app_name"
+                android:src="@mipmap/ic_launcher" />
+
+            <TextView
+                android:id="@+id/walkthrough_kicker"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.16"
+                android:textColor="@color/accent"
+                android:textSize="11sp" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/walkthrough_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="10dp"
             android:fontFamily="sans-serif-medium"
-            android:gravity="center"
             android:textColor="@color/text_primary"
-            android:textSize="28sp" />
+            android:textSize="24sp" />
 
         <TextView
             android:id="@+id/walkthrough_body"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="8dp"
             android:fontFamily="sans-serif"
-            android:gravity="center"
-            android:lineSpacingExtra="5dp"
+            android:lineSpacingExtra="4dp"
             android:textColor="@color/text_secondary"
             android:textSize="15sp" />
-
-        <LinearLayout
-            android:id="@+id/walkthrough_phone"
-            android:layout_width="200dp"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="22dp"
-            android:background="@drawable/walkthrough_phone_frame"
-            android:orientation="vertical"
-            android:padding="10dp"
-            android:visibility="gone">
-
-            <View
-                android:layout_width="36dp"
-                android:layout_height="3dp"
-                android:layout_gravity="center_horizontal"
-                android:layout_marginBottom="10dp"
-                android:background="@color/hairline" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-medium"
-                android:text="@string/walkthrough_phone_mock_title"
-                android:textColor="@color/text_primary"
-                android:textSize="11sp" />
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="8dp"
-                android:layout_marginTop="10dp"
-                android:background="@color/row_selected_bg" />
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="8dp"
-                android:layout_marginTop="6dp"
-                android:background="@color/row_selected_bg" />
-
-            <View
-                android:layout_width="80dp"
-                android:layout_height="8dp"
-                android:layout_marginTop="6dp"
-                android:layout_marginBottom="8dp"
-                android:background="@color/accent_soft" />
-        </LinearLayout>
 
         <LinearLayout
             android:id="@+id/walkthrough_dots"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
-            android:layout_marginTop="28dp"
+            android:layout_marginTop="16dp"
             android:orientation="horizontal" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="22dp"
+            android:layout_marginTop="16dp"
             android:orientation="horizontal">
 
             <TextView

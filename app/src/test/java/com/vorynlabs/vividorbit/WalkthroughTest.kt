@@ -1,7 +1,6 @@
 package com.vorynlabs.vividorbit
 
 import com.vorynlabs.vividorbit.ui.isLastWalkthroughPage
-import com.vorynlabs.vividorbit.ui.isPhoneWalkthroughPage
 import com.vorynlabs.vividorbit.ui.nextWalkthroughPage
 import com.vorynlabs.vividorbit.ui.prevWalkthroughPage
 import com.vorynlabs.vividorbit.ui.shouldShowWalkthrough
@@ -14,38 +13,32 @@ import org.junit.Test
 class WalkthroughTest {
 
     @Test
-    fun testPageCountIsSeven() {
-        assertEquals(8, walkthroughPageCount())
+    fun testPageCountIsFour() {
+        assertEquals(4, walkthroughPageCount())
     }
 
     @Test
     fun testNextAdvancesWithinBounds() {
         assertEquals(1, nextWalkthroughPage(0))
-        assertEquals(6, nextWalkthroughPage(5))
-        assertEquals(7, nextWalkthroughPage(6))
+        assertEquals(2, nextWalkthroughPage(1))
+        assertEquals(3, nextWalkthroughPage(2))
     }
 
     @Test
     fun testNextClampsAtLastPage() {
-        assertEquals(7, nextWalkthroughPage(7))
+        assertEquals(3, nextWalkthroughPage(3))
     }
 
     @Test
     fun testPrevClampsAtFirstPage() {
         assertEquals(0, prevWalkthroughPage(0))
-        assertEquals(6, prevWalkthroughPage(7))
+        assertEquals(2, prevWalkthroughPage(3))
     }
 
     @Test
     fun testIsLastWalkthroughPage() {
-        assertFalse(isLastWalkthroughPage(6))
-        assertTrue(isLastWalkthroughPage(7))
-    }
-
-    @Test
-    fun testPhonePageIndex() {
-        assertTrue(isPhoneWalkthroughPage(6))
-        assertFalse(isPhoneWalkthroughPage(0))
+        assertFalse(isLastWalkthroughPage(2))
+        assertTrue(isLastWalkthroughPage(3))
     }
 
     @Test

@@ -104,38 +104,25 @@
     <string name="walkthrough_back">Back</string>
     <string name="walkthrough_next">Next</string>
     <string name="walkthrough_get_started">Get started</string>
-    <string name="walkthrough_phone_mock_title">Lineup</string>
 
     <string-array name="walkthrough_kickers">
-        <item>VORYN LABS</item>
-        <item>VIVIDORBIT</item>
-        <item>GUIDE</item>
-        <item>LINEUP</item>
-        <item>STARTUP</item>
-        <item>REMOTE</item>
+        <item>WATCH</item>
+        <item>LIST</item>
+        <item>NUMBERS</item>
         <item>PHONE</item>
-        <item>READY</item>
     </string-array>
 
     <string-array name="walkthrough_titles">
-        <item>Made by Voryn Labs</item>
-        <item>Live TV, organized</item>
-        <item>Move around the guide</item>
-        <item>Number channels your way</item>
-        <item>Choose the startup channel</item>
-        <item>Map any remote key</item>
-        <item>Edit from your phone</item>
-        <item>You\'re set</item>
+        <item>What\'s on</item>
+        <item>Your channels</item>
+        <item>Number them yourself</item>
+        <item>Or edit from your phone</item>
     </string-array>
 
     <string-array name="walkthrough_bodies">
-        <item>An independent studio. Calm software, no dark patterns, no accounts, no data sold. VividOrbit is our living-room app.</item>
-        <item>A lineup manager for the tuner already in this box. It does not stream the internet and does not replace your cable or DTH service.</item>
-        <item>GUIDE opens the list. Up from the first row reaches All / Favorites. Left opens categories. Right shows now and next. Settings is the top-right control.</item>
-        <item>Open Settings. Turn Custom Channel Numbers ON. OK a channel in the list below to type a number. If that number is taken, the two channels swap. Auto-number 1-N or Reset to DTH sit under the toggle.</item>
-        <item>In Settings, pick Last watched, First in list, or a fixed default. Long-press OK on a channel in the guide to set it as the startup channel.</item>
-        <item>Settings → Button mapper lets you bind zap, guide, info, last-channel, and favorites to whatever keys your remote actually has.</item>
-        <item>Settings → Phone Setup shows a QR. Scan it on the same Wi-Fi to reorder, renumber, hide, and tune. The page lives on this TV and stops when you close the panel.</item>
-        <item>No accounts, ads, or analytics. If the list is empty, run a channel scan in the system Live TV settings first, then come back.</item>
+        <item>Press OK to see the channel and program. If your remote has CH+ or CH−, those change channel. Any key can be remapped later in Settings → Remote.</item>
+        <item>This is the guide. OK picks a channel. Some remotes open it with GUIDE or MENU — map whatever you have in Settings → Remote.</item>
+        <item>Turn Custom numbers ON, then OK a channel and type a number. If it\'s taken, the two channels swap.</item>
+        <item>Scan this QR on the same Wi-Fi to reorder, hide, and tune. The page lives on this TV and stops when you close Phone Setup.</item>
     </string-array>
 </resources>

@@ -8,6 +8,11 @@ import com.vorynlabs.vividorbit.R
 
 class WalkthroughController(
     private val overlay: View,
+    private val onShowInfo: () -> Unit,
+    private val onShowGuide: () -> Unit,
+    private val onShowLineup: () -> Unit,
+    private val onShowPhone: () -> Unit,
+    private val onLeavePanels: () -> Unit,
     private val onFinish: () -> Unit
 ) {
     private val kickerView: TextView = overlay.findViewById(R.id.walkthrough_kicker)
@@ -17,7 +22,6 @@ class WalkthroughController(
     private val backBtn: TextView = overlay.findViewById(R.id.walkthrough_back_btn)
     private val nextBtn: TextView = overlay.findViewById(R.id.walkthrough_next_btn)
     private val dotsContainer: LinearLayout = overlay.findViewById(R.id.walkthrough_dots)
-    private val phonePanel: View = overlay.findViewById(R.id.walkthrough_phone)
 
     private var currentPage = 0
     private val kickers = overlay.resources.getStringArray(R.array.walkthrough_kickers)
@@ -25,7 +29,7 @@ class WalkthroughController(
     private val bodies = overlay.resources.getStringArray(R.array.walkthrough_bodies)
 
     init {
-        skipBtn.setOnClickListener { onFinish() }
+        skipBtn.setOnClickListener { finish() }
         backBtn.setOnClickListener { goBack() }
         nextBtn.setOnClickListener { goNext() }
     }
@@ -50,19 +54,42 @@ class WalkthroughController(
                 true
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
-                goPrevPage()
-                true
+                if (isCoachButtonFocused()) false else {
+                    goPrevPage()
+                    true
+                }
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                goNext()
-                true
+                if (isCoachButtonFocused()) false else {
+                    goNext()
+                    true
+                }
+            }
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                if (currentPage == 0) {
+                    onShowInfo()
+                    goNext()
+                    true
+                } else {
+                    false
+                }
             }
             else -> false
         }
     }
 
+    private fun isCoachButtonFocused(): Boolean {
+        val focused = overlay.findFocus()
+        return focused == skipBtn || focused == backBtn || focused == nextBtn
+    }
+
+    private fun finish() {
+        onLeavePanels()
+        onFinish()
+    }
+
     private fun goBack() {
-        if (currentPage == 0) onFinish() else {
+        if (currentPage == 0) finish() else {
             currentPage = prevWalkthroughPage(currentPage)
             bindPage()
         }
@@ -76,7 +103,7 @@ class WalkthroughController(
     }
 
     private fun goNext() {
-        if (isLastWalkthroughPage(currentPage)) onFinish() else {
+        if (isLastWalkthroughPage(currentPage)) finish() else {
             currentPage = nextWalkthroughPage(currentPage)
             bindPage()
         }
@@ -86,15 +113,20 @@ class WalkthroughController(
         kickerView.text = kickers[currentPage]
         titleView.text = titles[currentPage]
         bodyView.text = bodies[currentPage]
-        phonePanel.visibility = if (isPhoneWalkthroughPage(currentPage)) View.VISIBLE else View.GONE
-        skipBtn.visibility = if (isLastWalkthroughPage(currentPage)) View.INVISIBLE else View.VISIBLE
+        skipBtn.visibility = if (isLastWalkthroughPage(currentPage)) View.GONE else View.VISIBLE
         backBtn.visibility = if (currentPage == 0) View.INVISIBLE else View.VISIBLE
         nextBtn.setText(
             if (isLastWalkthroughPage(currentPage)) R.string.walkthrough_get_started
             else R.string.walkthrough_next
         )
         bindDots()
-        nextBtn.requestFocus()
+        when (currentPage) {
+            0 -> onLeavePanels()
+            1 -> onShowGuide()
+            2 -> onShowLineup()
+            3 -> onShowPhone()
+        }
+        if (currentPage == 0) overlay.requestFocus() else nextBtn.requestFocus()
     }
 
     private fun bindDots() {

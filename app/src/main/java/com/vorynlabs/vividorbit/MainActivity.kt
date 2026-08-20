@@ -387,6 +387,28 @@ class MainActivity : Activity(), CoroutineScope {
         walkthroughOverlay = findViewById(R.id.walkthrough_overlay)
         walkthroughController = WalkthroughController(
             overlay = walkthroughOverlay,
+            onShowInfo = {
+                selectedChannel?.let { showBottomBanner(it) }
+            },
+            onShowGuide = {
+                showSidebar()
+            },
+            onShowLineup = {
+                openSettings()
+                showSettingsSection(0)
+            },
+            onShowPhone = {
+                openSettings()
+                showSettingsSection(2)
+            },
+            onLeavePanels = {
+                if (::settingsContainer.isInitialized && settingsContainer.visibility == View.VISIBLE) {
+                    closeSettings()
+                }
+                if (::sidebarContainer.isInitialized && sidebarContainer.visibility == View.VISIBLE) {
+                    hideSidebar()
+                }
+            },
             onFinish = {
                 repository.setWalkthroughSeen()
                 walkthroughController.hide()
@@ -819,12 +841,11 @@ class MainActivity : Activity(), CoroutineScope {
     }
 
     private fun tuneToStartupChannel(preserveCurrentChannel: Boolean) {
-        if (isWalkthroughShowing()) return
         val visible = zapChannels()
         if (visible.isNotEmpty()) {
             val startChannel = repository.resolveStartupChannel(visible, preserveCurrentChannel, selectedChannel)
             if (startChannel != null) {
-                tuneToChannel(startChannel)
+                tuneToChannel(startChannel, allowDuringWalkthrough = true)
             }
         } else {
             showSidebar()
@@ -1267,8 +1288,8 @@ class MainActivity : Activity(), CoroutineScope {
         channelUnavailableText.visibility = View.VISIBLE
     }
 
-    private fun tuneToChannel(channel: Channel) {
-        if (isWalkthroughShowing()) return
+    private fun tuneToChannel(channel: Channel, allowDuringWalkthrough: Boolean = false) {
+        if (isWalkthroughShowing() && !allowDuringWalkthrough) return
         previewChannel = null
         val current = selectedChannel
         if (current != null && current.id != channel.id) {
@@ -1649,14 +1670,7 @@ class MainActivity : Activity(), CoroutineScope {
 
         if (isWalkthroughShowing()) {
             if (walkthroughController.handleKey(keyCode)) return true
-            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
-                keyCode == KeyEvent.KEYCODE_ENTER ||
-                keyCode == KeyEvent.KEYCODE_DPAD_UP ||
-                keyCode == KeyEvent.KEYCODE_DPAD_DOWN
-            ) {
-                return super.onKeyDown(keyCode, event)
-            }
-            return true
+            return super.onKeyDown(keyCode, event)
         }
 
         if (keyCode == KeyEvent.KEYCODE_BACK) {
