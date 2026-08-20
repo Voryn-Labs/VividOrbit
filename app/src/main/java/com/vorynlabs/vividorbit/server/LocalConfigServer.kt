@@ -207,6 +207,7 @@ class LocalConfigServer(
                 method == "POST" && path == "/api/reorder" ->
                     runBlocking(Dispatchers.IO) { handlePostReorder(output, body) }
                 method == "POST" && path == "/api/favorite" -> handlePostFavorite(output, body)
+                method == "POST" && path == "/api/hidden" -> handlePostHidden(output, body)
                 method == "POST" && path == "/api/config" -> handlePostConfig(output, body)
                 method == "POST" && path == "/api/tune" -> handlePostTune(output, body)
                 method == "GET" && path == "/api/export" ->
@@ -264,6 +265,7 @@ class LocalConfigServer(
             item.put("originalNumber", ch.originalDisplayNumber)
             item.put("name", ch.displayName)
             item.put("isFavorite", favorites.contains(ch.id))
+            item.put("isHidden", repository.isHidden(ch.id))
             array.put(item)
         }
         json.put("channels", array)
@@ -289,6 +291,24 @@ class LocalConfigServer(
             resp.put("success", true)
             resp.put("channelId", channelId)
             resp.put("isFavorite", isNowFav)
+            sendJsonResponse(output, 200, resp)
+        } catch (e: Exception) {
+            sendJsonResponse(output, 400, JSONObject().put("error", e.message ?: "Invalid JSON"))
+        }
+    }
+
+    private fun handlePostHidden(output: OutputStream, body: String) {
+        try {
+            val req = JSONObject(body)
+            val channelId = req.getLong("channelId")
+            val hidden = req.optBoolean("hidden", true)
+            repository.setHidden(channelId, hidden)
+            onDataChanged()
+
+            val resp = JSONObject()
+            resp.put("success", true)
+            resp.put("channelId", channelId)
+            resp.put("isHidden", hidden)
             sendJsonResponse(output, 200, resp)
         } catch (e: Exception) {
             sendJsonResponse(output, 400, JSONObject().put("error", e.message ?: "Invalid JSON"))

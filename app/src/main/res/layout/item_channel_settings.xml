@@ -14,15 +14,14 @@
 
     <TextView
         android:id="@+id/settings_custom_number"
-        android:layout_width="52dp"
+        android:layout_width="56dp"
         android:layout_height="match_parent"
-        android:gravity="end|center_vertical"
+        android:gravity="center"
         android:includeFontPadding="false"
-        android:background="@drawable/badge_number_bg"
-        android:duplicateParentState="true"
+        android:background="@android:color/transparent"
         android:fontFamily="sans-serif-medium"
         android:textColor="@color/text_primary"
-        android:textSize="14sp"
+        android:textSize="15sp"
         android:importantForAccessibility="no"
         android:text="1" />
 

@@ -1,5 +1,6 @@
 package com.vorynlabs.vividorbit.ui
 
+import android.graphics.Typeface
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -54,6 +55,13 @@ class ChannelSettingsAdapter(
         }
     }
 
+    fun notifyHiddenChanged(channelId: Long) {
+        val index = channels.indexOfFirst { it.id == channelId }
+        if (index != -1) {
+            notifyItemChanged(index)
+        }
+    }
+
     inner class ViewHolder(itemView: View, private val scope: CoroutineScope) : RecyclerView.ViewHolder(itemView) {
         private val customNumberText: TextView = itemView.findViewById(R.id.settings_custom_number)
         private val logoImage: ImageView = itemView.findViewById(R.id.settings_channel_logo)
@@ -77,14 +85,19 @@ class ChannelSettingsAdapter(
         ) {
             customNumberText.text = channel.displayNumber
             nameText.text = channel.displayName
-            dthNumberText.text = if (isHiddenChecker?.invoke(channel.id) == true) {
-                "Hidden · OK to restore"
+            val hidden = isHiddenChecker?.invoke(channel.id) == true
+            dthNumberText.text = if (hidden) {
+                itemView.context.getString(R.string.settings_hidden_hint)
             } else {
                 itemView.context.getString(R.string.dth_format, channel.originalDisplayNumber)
             }
+            dthNumberText.setTypeface(null, if (hidden) Typeface.BOLD else Typeface.NORMAL)
+            dthNumberText.setTextColor(
+                itemView.context.getColor(if (hidden) R.color.accent_dim else R.color.text_secondary)
+            )
 
             imageJob?.cancel()
-            imageJob = ChannelLogoLoader.bind(logoImage, scope, channel.id, channel.logoUri)
+            logoImage.visibility = View.GONE
 
             itemView.setOnClickListener {
                 onClick(channel)

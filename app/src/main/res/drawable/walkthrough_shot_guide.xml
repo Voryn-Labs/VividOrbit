@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/panel_bg" />
+            <stroke android:width="1dp" android:color="@color/hairline" />
+        </shape>
+    </item>
+    <item android:left="16dp" android:top="14dp" android:right="120dp" android:bottom="118dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/text_primary" />
+        </shape>
+    </item>
+    <item android:left="16dp" android:top="36dp" android:right="200dp" android:bottom="100dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/accent" />
+        </shape>
+    </item>
+    <item android:left="16dp" android:top="58dp" android:right="40dp" android:bottom="72dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/row_focus_bg" />
+        </shape>
+    </item>
+    <item android:left="16dp" android:top="82dp" android:right="80dp" android:bottom="48dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/hairline" />
+        </shape>
+    </item>
+    <item android:left="16dp" android:top="106dp" android:right="100dp" android:bottom="24dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/hairline" />
+        </shape>
+    </item>
+</layer-list>

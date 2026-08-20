@@ -150,7 +150,7 @@ class ChannelAdapter(
             )
 
             imageJob?.cancel()
-            imageJob = ChannelLogoLoader.bind(logoImage, scope, channel.id, channel.logoUri)
+            logoImage.visibility = View.GONE
 
             epgJob?.cancel()
             programText.visibility = View.GONE

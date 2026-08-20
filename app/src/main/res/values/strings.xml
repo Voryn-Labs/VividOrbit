@@ -1,18 +1,36 @@
 <resources>
     <string name="app_name">VividOrbit</string>
-    <string name="channel_unavailable">Channel Unavailable</string>
+    <string name="channel_unavailable">Channel unavailable.\nContact your provider.</string>
     <string name="permission_required">TV listings permission is required to load channels. Please grant it in Settings and restart the app.</string>
     <string name="no_channels_message">No channels found.\nTry running a channel scan on your source.</string>
     <string name="dth_format">DTH: %1$s</string>
     <string name="settings_title">Channel Settings</string>
+    <string name="settings_btn_text">Settings</string>
+    <string name="guide_title">GUIDE</string>
+    <string name="guide_tab_all">All</string>
+    <string name="guide_tab_favorites">Favorites</string>
     <string name="custom_numbers_title">Custom Channel Numbers</string>
-    <string name="custom_numbers_desc">Order channels linearly with custom assigned numbers</string>
+    <string name="custom_numbers_desc">ON to use your numbers. OK a channel below to assign one.</string>
+    <string name="settings_assign_hint">OK A CHANNEL TO SET ITS NUMBER · HIDDEN ROWS: TAP OK TO UNHIDE</string>
+    <string name="settings_hidden_hint">HIDDEN · tap OK to unhide</string>
     <string name="toggle_on">ON</string>
     <string name="toggle_off">OFF</string>
     <string name="btn_reset_dth">Reset to DTH</string>
     <string name="edit_number_title">Assign Channel Number</string>
     <string name="edit_number_hint">Press 0-9 on remote to enter number</string>
     <string name="conflict_swap_format">⚠ Number %1$s is used by %2$s. Saving will swap.</string>
+    <string name="btn_close">Close</string>
+    <string name="btn_auto_renumber">Auto 1–N</string>
+    <string name="settings_nav_lineup">Lineup</string>
+    <string name="settings_nav_remote">Remote</string>
+    <string name="settings_nav_phone">Phone</string>
+    <string name="settings_nav_display">Display</string>
+    <string name="settings_nav_about">About</string>
+    <string name="action_favorite">Add or remove favorite</string>
+    <string name="action_assign_number">Assign custom number</string>
+    <string name="action_set_startup">Set as startup channel</string>
+    <string name="no_favorites_message">No favorites yet.\nLong-press OK on a channel.</string>
+    <string name="keymap_listening">Press a remote key for %1$s.\nBack cancels. GUIDE can be mapped.</string>
     <string name="btn_save">Save</string>
     <string name="btn_cancel">Cancel</string>
 
@@ -38,6 +56,10 @@
 
     <string name="phone_setup_btn">Phone Setup</string>
     <string name="phone_setup_desc">Reorder channels and edit lineup on your phone</string>
+    <string name="phone_setup_inline_help">Scan this QR on the same Wi-Fi. The page stays on this TV. Nothing is uploaded.</string>
+    <string name="phone_setup_retry">Refresh QR</string>
+    <string name="number_saved_format">%1$s is now %2$s</string>
+    <string name="number_swapped_format">%1$s is now %2$s · %3$s took %4$s</string>
     <string name="phone_setup_title">Phone Configuration</string>
 
     <string name="settings_banner_title">Info banner</string>
@@ -82,34 +104,38 @@
     <string name="walkthrough_back">Back</string>
     <string name="walkthrough_next">Next</string>
     <string name="walkthrough_get_started">Get started</string>
-    <string name="walkthrough_chip_zap">Zap ↑↓</string>
-    <string name="walkthrough_chip_info">OK info</string>
-    <string name="walkthrough_chip_guide">Guide</string>
-    <string name="walkthrough_chip_last">Last ch.</string>
-    <string name="walkthrough_phone_caption">Settings → Phone Setup. Same Wi-Fi. The TV hosts a local page — nothing is uploaded.</string>
-    <string name="walkthrough_hidden">Hidden · restore in Settings</string>
-    <string name="walkthrough_status_assigned">%1$s is now channel %2$s</string>
-    <string name="walkthrough_status_swap">Swapped %1$s (#%2$s) ↔ %3$s (#%4$s)</string>
-    <string name="walkthrough_status_starred">Starred %1$s ★</string>
-    <string name="walkthrough_status_unstarred">Removed star from %1$s</string>
-    <string name="walkthrough_status_hidden">Hidden %1$s</string>
-    <string name="walkthrough_status_restored">Restored %1$s</string>
+    <string name="walkthrough_phone_mock_title">Lineup</string>
+
+    <string-array name="walkthrough_kickers">
+        <item>VORYN LABS</item>
+        <item>VIVIDORBIT</item>
+        <item>GUIDE</item>
+        <item>LINEUP</item>
+        <item>STARTUP</item>
+        <item>REMOTE</item>
+        <item>PHONE</item>
+        <item>READY</item>
+    </string-array>
 
     <string-array name="walkthrough_titles">
-        <item>Welcome to VividOrbit</item>
-        <item>Remote &amp; Key Controls</item>
-        <item>Custom Channel Numbers</item>
-        <item>Favorites (★) &amp; Quick Filters</item>
-        <item>Lineup Manager on Phone</item>
-        <item>You\'re Ready</item>
+        <item>Made by Voryn Labs</item>
+        <item>Live TV, organized</item>
+        <item>Move around the guide</item>
+        <item>Number channels your way</item>
+        <item>Choose the startup channel</item>
+        <item>Map any remote key</item>
+        <item>Edit from your phone</item>
+        <item>You\'re set</item>
     </string-array>
 
     <string-array name="walkthrough_bodies">
-        <item>A high-performance live TV lineup manager for your TV\'s built-in tuner. Fast zapping, custom channel numbering, and zero clutter.</item>
-        <item>Press buttons on your remote now to test! Standard keys (CH±, Guide, OK, Recall) work immediately. If your remote has different buttons, you can customize keys anytime in Settings.</item>
-        <item>Assign ANY channel number you prefer (1..9999). When you assign a number already in use, the two channels automatically swap without conflicts. Try clicking below!</item>
-        <item>Star (★) your favorite channels to quickly view them in the [ ★ Favorites ] tab in the Guide. You can also hide channels you don\'t watch and restore them in Settings.</item>
-        <item>Scan the QR code in Settings → Phone Setup from your phone browser on Wi-Fi to reorder channels, import/export backups, and edit names cleanly.</item>
-        <item>Zero ads, no accounts, and 100% offline local playback. Press \'Get Started\' to begin watching!</item>
+        <item>An independent studio. Calm software, no dark patterns, no accounts, no data sold. VividOrbit is our living-room app.</item>
+        <item>A lineup manager for the tuner already in this box. It does not stream the internet and does not replace your cable or DTH service.</item>
+        <item>GUIDE opens the list. Up from the first row reaches All / Favorites. Left opens categories. Right shows now and next. Settings is the top-right control.</item>
+        <item>Open Settings. Turn Custom Channel Numbers ON. OK a channel in the list below to type a number. If that number is taken, the two channels swap. Auto-number 1-N or Reset to DTH sit under the toggle.</item>
+        <item>In Settings, pick Last watched, First in list, or a fixed default. Long-press OK on a channel in the guide to set it as the startup channel.</item>
+        <item>Settings → Button mapper lets you bind zap, guide, info, last-channel, and favorites to whatever keys your remote actually has.</item>
+        <item>Settings → Phone Setup shows a QR. Scan it on the same Wi-Fi to reorder, renumber, hide, and tune. The page lives on this TV and stops when you close the panel.</item>
+        <item>No accounts, ads, or analytics. If the list is empty, run a channel scan in the system Live TV settings first, then come back.</item>
     </string-array>
 </resources>

@@ -30,8 +30,22 @@ class KeyMappingRepository(context: Context) {
         return if (code != -1) code else null
     }
 
-    fun setCustomKey(action: RemoteAction, keyCode: Int) {
+    /**
+     * Returns the action that would conflict if [keyCode] were assigned to [action],
+     * or null if the key is free. A key conflicts when it is already used as a custom
+     * key by another action or as a default key by any other action (defaults stay
+     * active until overridden, so no physical button may activate more than one action).
+     */
+    fun findConflict(action: RemoteAction, keyCode: Int): RemoteAction? {
+        return RemoteAction.values().firstOrNull { other ->
+            other != action && (getCustomKey(other) == keyCode || other.defaultKeys.contains(keyCode))
+        }
+    }
+
+    fun setCustomKey(action: RemoteAction, keyCode: Int): Boolean {
+        if (findConflict(action, keyCode) != null) return false
         prefs.edit().putInt("key_${action.key}", keyCode).apply()
+        return true
     }
 
     fun resetDefaults() {
@@ -40,10 +54,7 @@ class KeyMappingRepository(context: Context) {
 
     fun matches(action: RemoteAction, keyCode: Int): Boolean {
         val custom = getCustomKey(action)
-        if (custom != null) {
-            return keyCode == custom || action.defaultKeys.contains(keyCode)
-        }
-        return action.defaultKeys.contains(keyCode)
+        return if (custom != null) keyCode == custom else action.defaultKeys.contains(keyCode)
     }
 
     fun getActionDisplayName(action: RemoteAction): String {

@@ -22,7 +22,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import android.widget.Toast
+
 import androidx.cardview.widget.CardView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -136,12 +136,29 @@ class MainActivity : Activity(), CoroutineScope {
 
     private lateinit var keyMappingRepository: KeyMappingRepository
     private lateinit var settingsKeymapRow: View
-    private lateinit var keymapPanelCard: CardView
     private lateinit var keymapListContainer: LinearLayout
     private lateinit var keymapHintText: TextView
     private lateinit var keymapResetBtn: TextView
     private lateinit var keymapCloseBtn: TextView
     private var activeMappingAction: RemoteAction? = null
+    private lateinit var settingsNavLineup: TextView
+    private lateinit var settingsNavRemote: TextView
+    private lateinit var settingsNavPhone: TextView
+    private lateinit var settingsNavDisplay: TextView
+    private lateinit var settingsNavAbout: TextView
+    private lateinit var settingsSectionLineup: View
+    private lateinit var settingsSectionRemote: View
+    private lateinit var settingsSectionPhone: View
+    private lateinit var settingsSectionDisplay: View
+    private lateinit var settingsSectionAbout: View
+    private lateinit var settingsPhoneQr: ImageView
+    private lateinit var settingsPhoneUrl: TextView
+    private lateinit var channelActionCard: View
+    private lateinit var channelActionTitle: TextView
+    private lateinit var channelActionFavorite: TextView
+    private lateinit var channelActionNumber: TextView
+    private lateinit var channelActionStartup: TextView
+    private var actionSheetChannel: Channel? = null
 
     private var localConfigServer: LocalConfigServer? = null
     private var currentSessionToken: String = ""
@@ -163,6 +180,11 @@ class MainActivity : Activity(), CoroutineScope {
 
     private lateinit var walkthroughOverlay: View
     private lateinit var walkthroughController: WalkthroughController
+    private lateinit var appToast: TextView
+    private val toastHandler = Handler(Looper.getMainLooper())
+    private val hideToastRunnable = Runnable {
+        if (::appToast.isInitialized) appToast.visibility = View.GONE
+    }
 
     private val bannerHandler = Handler(Looper.getMainLooper())
     private var pendingBannerChannel: Channel? = null
@@ -212,6 +234,7 @@ class MainActivity : Activity(), CoroutineScope {
     private var activeGenre: String? = null
     private var activeProgramsChannel: Channel? = null
     private var guideLevel = 1
+    private var settingsAtRoot = true
     private var backLongPressHandled = false
     private var lastBackPressTime = 0L
     private var hasRevertedToPrevious = false
@@ -284,11 +307,27 @@ class MainActivity : Activity(), CoroutineScope {
         settingsAboutRow = findViewById(R.id.settings_about_row)
         settingsWalkthroughRow = findViewById(R.id.settings_walkthrough_row)
         settingsKeymapRow = findViewById(R.id.settings_keymap_row)
-        keymapPanelCard = findViewById(R.id.keymap_panel_card)
         keymapListContainer = findViewById(R.id.keymap_list_container)
         keymapHintText = findViewById(R.id.keymap_hint_text)
         keymapResetBtn = findViewById(R.id.keymap_reset_btn)
         keymapCloseBtn = findViewById(R.id.keymap_close_btn)
+        settingsNavLineup = findViewById(R.id.settings_nav_lineup)
+        settingsNavRemote = findViewById(R.id.settings_nav_remote)
+        settingsNavPhone = findViewById(R.id.settings_nav_phone)
+        settingsNavDisplay = findViewById(R.id.settings_nav_display)
+        settingsNavAbout = findViewById(R.id.settings_nav_about)
+        settingsSectionLineup = findViewById(R.id.settings_section_lineup)
+        settingsSectionRemote = findViewById(R.id.settings_section_remote)
+        settingsSectionPhone = findViewById(R.id.settings_section_phone)
+        settingsSectionDisplay = findViewById(R.id.settings_section_display)
+        settingsSectionAbout = findViewById(R.id.settings_section_about)
+        settingsPhoneQr = findViewById(R.id.settings_phone_qr)
+        settingsPhoneUrl = findViewById(R.id.settings_phone_url)
+        channelActionCard = findViewById(R.id.channel_action_card)
+        channelActionTitle = findViewById(R.id.channel_action_title)
+        channelActionFavorite = findViewById(R.id.channel_action_favorite)
+        channelActionNumber = findViewById(R.id.channel_action_number)
+        channelActionStartup = findViewById(R.id.channel_action_startup)
         settingsBannerRow = findViewById(R.id.settings_banner_row)
         settingsBannerSubtitle = findViewById(R.id.settings_banner_subtitle)
         settingsGuideHideRow = findViewById(R.id.settings_guide_hide_row)
@@ -344,12 +383,16 @@ class MainActivity : Activity(), CoroutineScope {
         programsSubtitle = findViewById(R.id.programs_subtitle)
         programsContainer = findViewById(R.id.programs_container)
 
+        appToast = findViewById(R.id.app_toast)
         walkthroughOverlay = findViewById(R.id.walkthrough_overlay)
         walkthroughController = WalkthroughController(
             overlay = walkthroughOverlay,
             onFinish = {
                 repository.setWalkthroughSeen()
                 walkthroughController.hide()
+                if (selectedChannel == null) {
+                    tuneToStartupChannel(preserveCurrentChannel = false)
+                }
             }
         )
 
@@ -387,7 +430,7 @@ class MainActivity : Activity(), CoroutineScope {
         }
 
         settingsPhoneSetupRow.setOnClickListener {
-            openPhoneSetup()
+            bindPhoneSection()
         }
 
         settingsAboutRow.setOnClickListener {
@@ -399,13 +442,21 @@ class MainActivity : Activity(), CoroutineScope {
         }
 
         settingsKeymapRow.setOnClickListener {
-            openKeyMapper()
+            showSettingsSection(1)
         }
+        settingsNavLineup.setOnClickListener { showSettingsSection(0) }
+        settingsNavRemote.setOnClickListener { showSettingsSection(1) }
+        settingsNavPhone.setOnClickListener { showSettingsSection(2) }
+        settingsNavDisplay.setOnClickListener { showSettingsSection(3) }
+        settingsNavAbout.setOnClickListener { showSettingsSection(4) }
+        channelActionFavorite.setOnClickListener { applyChannelActionFavorite() }
+        channelActionNumber.setOnClickListener { applyChannelActionNumber() }
+        channelActionStartup.setOnClickListener { applyChannelActionStartup() }
 
         keymapResetBtn.setOnClickListener {
             keyMappingRepository.resetDefaults()
             renderKeyMapRows()
-            Toast.makeText(this, "Reset remote keys to defaults", Toast.LENGTH_SHORT).show()
+            showAppToast("Reset remote keys to defaults")
         }
 
         keymapCloseBtn.setOnClickListener {
@@ -426,16 +477,16 @@ class MainActivity : Activity(), CoroutineScope {
         settingsHideRow.setOnClickListener {
             val channel = selectedChannel
             if (channel == null) {
-                Toast.makeText(this, R.string.settings_hide_none, Toast.LENGTH_SHORT).show()
+                showAppToast(getString(R.string.settings_hide_none))
                 return@setOnClickListener
             }
             repository.setHidden(channel.id, true)
             refreshDisplayedChannels()
-            channelSettingsAdapter.updateChannels(allChannels)
+            channelSettingsAdapter.notifyHiddenChanged(channel.id)
             updateSettingsToggleUi()
             val next = zapChannels().firstOrNull { it.id != channel.id }
             if (next != null) tuneToChannel(next)
-            Toast.makeText(this, "Hidden ${channel.displayName}", Toast.LENGTH_SHORT).show()
+            showAppToast("Hidden ${channel.displayName}")
         }
 
         settingsGuideEpgRow.setOnClickListener {
@@ -555,13 +606,7 @@ class MainActivity : Activity(), CoroutineScope {
             },
             showProgramTitles = { repository.isGuideProgramTitlesEnabled() },
             onChannelLongClick = { channel ->
-                val isNowFav = repository.toggleFavorite(channel.id)
-                channelAdapter.notifyFavoriteChanged(channel.id)
-                val msg = if (isNowFav) "Added to Favorites ★" else "Removed from Favorites"
-                Toast.makeText(this, "${channel.displayName}: $msg", Toast.LENGTH_SHORT).show()
-                if (isFavoritesFilterActive) {
-                    refreshDisplayedChannels()
-                }
+                openChannelActionSheet(channel)
                 true
             }
         )
@@ -579,10 +624,10 @@ class MainActivity : Activity(), CoroutineScope {
             onChannelClick = { channel ->
                 if (repository.isHidden(channel.id)) {
                     repository.setHidden(channel.id, false)
-                    channelSettingsAdapter.updateChannels(allChannels)
+                    channelSettingsAdapter.notifyHiddenChanged(channel.id)
                     refreshDisplayedChannels()
                     updateSettingsToggleUi()
-                    Toast.makeText(this, "Restored ${channel.displayName}", Toast.LENGTH_SHORT).show()
+                    showAppToast("Restored ${channel.displayName}")
                 } else {
                     openEditNumberDialog(channel)
                 }
@@ -590,7 +635,7 @@ class MainActivity : Activity(), CoroutineScope {
             onChannelLongClick = { channel ->
                 repository.setStartupMode(StartupMode.FIXED_DEFAULT)
                 repository.setDefaultChannelId(channel.id)
-                Toast.makeText(this, getString(R.string.default_channel_set_toast, channel.displayName), Toast.LENGTH_SHORT).show()
+                showAppToast(getString(R.string.default_channel_set_toast, channel.displayName))
                 updateSettingsToggleUi()
                 true
             }
@@ -639,6 +684,16 @@ class MainActivity : Activity(), CoroutineScope {
         }
         channelAdapter.updateChannels(displayed)
         updateSidebarHeader(displayed.size)
+        if (displayed.isEmpty()) {
+            noChannelsText.visibility = View.VISIBLE
+            noChannelsText.text = if (isFavoritesFilterActive) {
+                getString(R.string.no_favorites_message)
+            } else {
+                getString(R.string.no_channels_message)
+            }
+        } else {
+            noChannelsText.visibility = View.GONE
+        }
     }
 
     private fun buildGenreList() {
@@ -751,7 +806,20 @@ class MainActivity : Activity(), CoroutineScope {
         }
     }
 
+    private fun isWalkthroughShowing(): Boolean {
+        return ::walkthroughController.isInitialized && walkthroughController.isVisible()
+    }
+
+    private fun showAppToast(message: String) {
+        if (!::appToast.isInitialized) return
+        appToast.text = message
+        appToast.visibility = View.VISIBLE
+        toastHandler.removeCallbacks(hideToastRunnable)
+        toastHandler.postDelayed(hideToastRunnable, 2200)
+    }
+
     private fun tuneToStartupChannel(preserveCurrentChannel: Boolean) {
+        if (isWalkthroughShowing()) return
         val visible = zapChannels()
         if (visible.isNotEmpty()) {
             val startChannel = repository.resolveStartupChannel(visible, preserveCurrentChannel, selectedChannel)
@@ -819,19 +887,64 @@ class MainActivity : Activity(), CoroutineScope {
         settingsContainer.visibility = View.VISIBLE
         updateSettingsToggleUi()
         channelSettingsAdapter.updateChannels(allChannels)
-        settingsToggleRow.requestFocus()
-        resetSidebarTimer()
+        val navs = listOf(settingsNavLineup, settingsNavRemote, settingsNavPhone, settingsNavDisplay, settingsNavAbout)
+        val sections = listOf(settingsSectionLineup, settingsSectionRemote, settingsSectionPhone, settingsSectionDisplay, settingsSectionAbout)
+        navs.forEach { it.isSelected = false }
+        sections.forEach { it.visibility = View.GONE }
+        stopPhoneSetupServer()
+        settingsNavLineup.requestFocus()
+        settingsAtRoot = true
+    }
+
+    private fun showSettingsSection(index: Int) {
+        val navs = listOf(settingsNavLineup, settingsNavRemote, settingsNavPhone, settingsNavDisplay, settingsNavAbout)
+        val sections = listOf(settingsSectionLineup, settingsSectionRemote, settingsSectionPhone, settingsSectionDisplay, settingsSectionAbout)
+        navs.forEachIndexed { i, nav -> nav.isSelected = i == index }
+        sections.forEachIndexed { i, section -> section.visibility = if (i == index) View.VISIBLE else View.GONE }
+        settingsAtRoot = false
+        if (index != 2) stopPhoneSetupServer()
+        when (index) {
+            0 -> {
+                channelSettingsAdapter.updateChannels(allChannels)
+                settingsToggleRow.requestFocus()
+            }
+            1 -> {
+                renderKeyMapRows()
+                keymapListContainer.getChildAt(0)?.requestFocus() ?: keymapResetBtn.requestFocus()
+            }
+            2 -> {
+                bindPhoneSection()
+                settingsPhoneSetupRow.requestFocus()
+            }
+            else -> navs[index].requestFocus()
+        }
     }
 
     private fun closeSettings() {
-        settingsContainer.visibility = View.GONE
-        sidebarContainer.visibility = View.VISIBLE
-        if (hasGenres()) {
-            showGenresLevel()
+        stopPhoneSetupServer()
+        if (settingsAtRoot) {
+            settingsContainer.visibility = View.GONE
+            sidebarContainer.visibility = View.GONE
         } else {
-            focusChannelListAtSelected()
-            showGuideLevel(forceFocus = false)
+            settingsContainer.visibility = View.GONE
+            sidebarContainer.visibility = View.VISIBLE
+            if (hasGenres()) {
+                showGenresLevel()
+            } else {
+                focusChannelListAtSelected()
+                showGuideLevel(forceFocus = false)
+            }
         }
+    }
+
+    private fun showSettingsRoot() {
+        val navs = listOf(settingsNavLineup, settingsNavRemote, settingsNavPhone, settingsNavDisplay, settingsNavAbout)
+        val sections = listOf(settingsSectionLineup, settingsSectionRemote, settingsSectionPhone, settingsSectionDisplay, settingsSectionAbout)
+        navs.forEach { it.isSelected = false }
+        sections.forEach { it.visibility = View.GONE }
+        stopPhoneSetupServer()
+        settingsNavLineup.requestFocus()
+        settingsAtRoot = true
     }
 
     private fun openStartupPicker() {
@@ -861,6 +974,46 @@ class MainActivity : Activity(), CoroutineScope {
         pendingConfirmAction = null
         settingsAutoRenumberBtn.requestFocus()
         resetSidebarTimer()
+    }
+
+    private fun stopPhoneSetupServer() {
+        localConfigServer?.stop()
+        localConfigServer = null
+        currentSessionToken = ""
+    }
+
+    private fun bindPhoneSection() {
+        val ip = NetworkUtils.getLocalIpAddress(this)
+        if (ip.isNullOrBlank()) {
+            settingsPhoneUrl.text = getString(R.string.offline_warning)
+            settingsPhoneQr.setImageDrawable(null)
+            return
+        }
+        if (currentSessionToken.isEmpty()) {
+            val random = SecureRandom()
+            val bytes = ByteArray(16)
+            random.nextBytes(bytes)
+            currentSessionToken = bytes.joinToString("") { "%02x".format(it) }
+        }
+        val url = "http://$ip:10230/?t=$currentSessionToken"
+        settingsPhoneUrl.text = url
+        val qrBitmap = QrCodeGenerator.generateQrBitmap(url, 400, 400)
+        if (qrBitmap != null) settingsPhoneQr.setImageBitmap(qrBitmap)
+        if (localConfigServer == null) {
+            localConfigServer = LocalConfigServer(
+                context = this,
+                repository = repository,
+                port = 10230,
+                sessionToken = currentSessionToken,
+                onDataChanged = {
+                    runOnUiThread { loadChannelData(preserveCurrentChannel = true) }
+                },
+                onTuneRequested = { channelId ->
+                    runOnUiThread { allChannels.find { it.id == channelId }?.let { tuneToChannel(it) } }
+                }
+            )
+            localConfigServer?.start()
+        }
     }
 
     private fun openPhoneSetup() {
@@ -926,19 +1079,16 @@ class MainActivity : Activity(), CoroutineScope {
     }
 
     private fun openKeyMapper() {
-        activeMappingAction = null
-        keymapHintText.text = getString(R.string.keymap_press_hint)
-        renderKeyMapRows()
-        keymapPanelCard.visibility = View.VISIBLE
-        keymapResetBtn.requestFocus()
-        resetSidebarTimer()
+        showSettingsSection(1)
     }
 
     private fun closeKeyMapper() {
         activeMappingAction = null
-        keymapPanelCard.visibility = View.GONE
-        settingsKeymapRow.requestFocus()
-        resetSidebarTimer()
+        keymapHintText.text = getString(R.string.keymap_press_hint)
+        renderKeyMapRows()
+        keymapListContainer.post {
+            keymapListContainer.getChildAt(0)?.requestFocus() ?: keymapResetBtn.requestFocus()
+        }
     }
 
     private fun renderKeyMapRows() {
@@ -954,7 +1104,7 @@ class MainActivity : Activity(), CoroutineScope {
                 background = resources.getDrawable(R.drawable.item_background_selector, null)
                 setOnClickListener {
                     activeMappingAction = action
-                    keymapHintText.text = "Press ANY remote button now to map for [${action.title}]..."
+                    keymapHintText.text = getString(R.string.keymap_listening, action.title)
                     renderKeyMapRows()
                 }
             }
@@ -979,12 +1129,51 @@ class MainActivity : Activity(), CoroutineScope {
         }
     }
 
+    private fun openChannelActionSheet(channel: Channel) {
+        actionSheetChannel = channel
+        channelActionTitle.text = channel.displayName
+        val fav = repository.isFavorite(channel.id)
+        channelActionFavorite.text = if (fav) "Remove favorite" else "Add to favorites"
+        channelActionCard.visibility = View.VISIBLE
+        channelActionFavorite.requestFocus()
+    }
+
+    private fun closeChannelActionSheet() {
+        channelActionCard.visibility = View.GONE
+        actionSheetChannel = null
+        focusChannelListAtSelected()
+    }
+
+    private fun applyChannelActionFavorite() {
+        val channel = actionSheetChannel ?: return
+        val isNowFav = repository.toggleFavorite(channel.id)
+        channelAdapter.notifyFavoriteChanged(channel.id)
+        showAppToast(if (isNowFav) "${channel.displayName}: favorite" else "${channel.displayName}: removed")
+        closeChannelActionSheet()
+        if (isFavoritesFilterActive) refreshDisplayedChannels()
+    }
+
+    private fun applyChannelActionNumber() {
+        val channel = actionSheetChannel ?: return
+        closeChannelActionSheet()
+        openEditNumberDialog(channel)
+    }
+
+    private fun applyChannelActionStartup() {
+        val channel = actionSheetChannel ?: return
+        repository.setStartupMode(StartupMode.FIXED_DEFAULT)
+        repository.setDefaultChannelId(channel.id)
+        showAppToast(getString(R.string.default_channel_set_toast, channel.displayName))
+        updateSettingsToggleUi()
+        closeChannelActionSheet()
+    }
+
     private fun openAboutUs() {
         try {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(ABOUT_US_URL))
             startActivity(intent)
         } catch (e: ActivityNotFoundException) {
-            Toast.makeText(this, R.string.about_us_no_browser, Toast.LENGTH_SHORT).show()
+            showAppToast(getString(R.string.about_us_no_browser))
         }
     }
 
@@ -1019,11 +1208,11 @@ class MainActivity : Activity(), CoroutineScope {
         editChannelName.text = channel.displayName
         editNumberDisplay.text = editBuffer
 
-        ChannelLogoLoader.bind(editChannelLogo, this, channel.id, channel.logoUri)
+        editChannelLogo.visibility = View.GONE
 
         updateConflictIndicator(editBuffer)
         editNumberCard.visibility = View.VISIBLE
-        editSaveBtn.requestFocus()
+        editNumberCard.post { editSaveBtn.requestFocus() }
         resetSidebarTimer()
     }
 
@@ -1044,10 +1233,17 @@ class MainActivity : Activity(), CoroutineScope {
         if (targetNumber.isNotEmpty()) {
             launch {
                 progressBar.visibility = View.VISIBLE
-                repository.assignChannelNumber(channel.id, targetNumber)
+                val swappedId = repository.assignChannelNumber(channel.id, targetNumber)
                 repository.setCustomNumbersEnabled(true)
                 closeEditNumberDialog()
                 loadChannelData(preserveCurrentChannel = true)
+                settingsRecyclerView.post { settingsRecyclerView.requestFocus() }
+                val swapped = swappedId?.let { id -> allChannels.find { it.id == id } }
+                if (swapped != null) {
+                    showAppToast(getString(R.string.number_swapped_format, channel.displayName, targetNumber, swapped.displayName, channel.displayNumber))
+                } else {
+                    showAppToast(getString(R.string.number_saved_format, channel.displayName, targetNumber))
+                }
             }
         } else {
             closeEditNumberDialog()
@@ -1059,7 +1255,7 @@ class MainActivity : Activity(), CoroutineScope {
         editingChannel = null
         editBuffer = ""
         isFirstDigitAfterOpen = true
-        settingsRecyclerView.requestFocus()
+        settingsRecyclerView.post { settingsRecyclerView.requestFocus() }
         resetSidebarTimer()
     }
 
@@ -1072,6 +1268,7 @@ class MainActivity : Activity(), CoroutineScope {
     }
 
     private fun tuneToChannel(channel: Channel) {
+        if (isWalkthroughShowing()) return
         previewChannel = null
         val current = selectedChannel
         if (current != null && current.id != channel.id) {
@@ -1105,7 +1302,7 @@ class MainActivity : Activity(), CoroutineScope {
             val target = allChannels.find { it.id == prevId }
             if (target != null) {
                 tuneToChannel(target)
-                Toast.makeText(this, "Quick Recall: ${target.displayName}", Toast.LENGTH_SHORT).show()
+                showAppToast("Last channel: ${target.displayName}")
             }
         }
     }
@@ -1115,7 +1312,7 @@ class MainActivity : Activity(), CoroutineScope {
         bannerChannelName.text = channel.displayName
         bannerEpgLayout.visibility = View.GONE
 
-        ChannelLogoLoader.bind(bannerChannelLogo, this, channel.id, channel.logoUri)
+        bannerChannelLogo.visibility = View.GONE
 
         pendingBannerChannel = channel
         bannerHandler.removeCallbacks(fetchBannerEpgRunnable)
@@ -1307,7 +1504,7 @@ class MainActivity : Activity(), CoroutineScope {
     private fun isAnyMenuVisible(): Boolean {
         return (::sidebarContainer.isInitialized && sidebarContainer.visibility == View.VISIBLE) ||
                 (::settingsContainer.isInitialized && settingsContainer.visibility == View.VISIBLE) ||
-                (::keymapPanelCard.isInitialized && keymapPanelCard.visibility == View.VISIBLE) ||
+                (::channelActionCard.isInitialized && channelActionCard.visibility == View.VISIBLE) ||
                 (::editNumberCard.isInitialized && editNumberCard.visibility == View.VISIBLE) ||
                 (::startupPickerCard.isInitialized && startupPickerCard.visibility == View.VISIBLE) ||
                 (::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE) ||
@@ -1336,13 +1533,16 @@ class MainActivity : Activity(), CoroutineScope {
             }
         }
 
-        Toast.makeText(this, "Channel $trimmed not found", Toast.LENGTH_SHORT).show()
+        showAppToast("No channel $trimmed")
     }
 
     private fun resetSidebarTimer() {
         sidebarHandler.removeCallbacks(hideSidebarRunnable)
         if (::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE) return
         if (::walkthroughOverlay.isInitialized && walkthroughOverlay.visibility == View.VISIBLE) return
+        if (::settingsContainer.isInitialized && settingsContainer.visibility == View.VISIBLE) return
+        if (::editNumberCard.isInitialized && editNumberCard.visibility == View.VISIBLE) return
+        if (::channelActionCard.isInitialized && channelActionCard.visibility == View.VISIBLE) return
         val hideMs = repository.getGuideAutoHideMs()
         if (hideMs > 0L && isAnyMenuVisible()) {
             sidebarHandler.postDelayed(hideSidebarRunnable, hideMs)
@@ -1384,7 +1584,6 @@ class MainActivity : Activity(), CoroutineScope {
 
     private fun hideSidebar() {
         if (::sidebarContainer.isInitialized) sidebarContainer.visibility = View.GONE
-        if (::settingsContainer.isInitialized) settingsContainer.visibility = View.GONE
         if (::editNumberCard.isInitialized) editNumberCard.visibility = View.GONE
         if (::startupPickerCard.isInitialized) startupPickerCard.visibility = View.GONE
         if (::confirmActionCard.isInitialized) confirmActionCard.visibility = View.GONE
@@ -1400,7 +1599,7 @@ class MainActivity : Activity(), CoroutineScope {
     }
 
     private fun showWalkthrough() {
-        walkthroughController.show(allChannels)
+        walkthroughController.show()
     }
 
     override fun onKeyLongPress(keyCode: Int, event: KeyEvent): Boolean {
@@ -1415,7 +1614,43 @@ class MainActivity : Activity(), CoroutineScope {
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         resetSidebarTimer()
 
-        if (::walkthroughController.isInitialized && walkthroughController.handleKey(keyCode)) {
+        if (activeMappingAction != null) {
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                closeKeyMapper()
+                return true
+            }
+            val action = activeMappingAction!!
+            val conflict = keyMappingRepository.findConflict(action, keyCode)
+            if (conflict != null) {
+                showAppToast("Key already used by ${conflict.title}")
+                return true
+            }
+            keyMappingRepository.setCustomKey(action, keyCode)
+            showAppToast("Mapped ${keyMappingRepository.getKeyDisplayName(keyCode)} to ${action.title}")
+            closeKeyMapper()
+            return true
+        }
+
+        if (::channelActionCard.isInitialized && channelActionCard.visibility == View.VISIBLE) {
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                closeChannelActionSheet()
+                return true
+            }
+            if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
+                return true
+            }
+            return super.onKeyDown(keyCode, event)
+        }
+
+        if (isWalkthroughShowing()) {
+            if (walkthroughController.handleKey(keyCode)) return true
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+                keyCode == KeyEvent.KEYCODE_ENTER ||
+                keyCode == KeyEvent.KEYCODE_DPAD_UP ||
+                keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+            ) {
+                return super.onKeyDown(keyCode, event)
+            }
             return true
         }
 
@@ -1499,22 +1734,6 @@ class MainActivity : Activity(), CoroutineScope {
                 updateConflictIndicator(editBuffer)
                 return true
             }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                val cur = editBuffer.toIntOrNull() ?: 0
-                editBuffer = (cur + 1).coerceAtMost(9999).toString()
-                isFirstDigitAfterOpen = false
-                editNumberDisplay.text = editBuffer
-                updateConflictIndicator(editBuffer)
-                return true
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                val cur = editBuffer.toIntOrNull() ?: 1
-                editBuffer = (cur - 1).coerceAtLeast(1).toString()
-                isFirstDigitAfterOpen = false
-                editNumberDisplay.text = editBuffer
-                updateConflictIndicator(editBuffer)
-                return true
-            }
             if (keyCode == KeyEvent.KEYCODE_DEL) {
                 if (editBuffer.length > 1) {
                     editBuffer = editBuffer.dropLast(1)
@@ -1541,58 +1760,66 @@ class MainActivity : Activity(), CoroutineScope {
         }
 
         if (::settingsContainer.isInitialized && settingsContainer.visibility == View.VISIBLE) {
-            if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                closeSettings()
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                if (settingsAtRoot) {
+                    closeSettings()
+                } else {
+                    showSettingsRoot()
+                }
                 return true
             }
+            return super.onKeyDown(keyCode, event)
         }
 
         if (::sidebarContainer.isInitialized && sidebarContainer.visibility == View.VISIBLE) {
             val focused = currentFocus
-            val isHeaderOrTabFocused = focused == sidebarTabAll || focused == sidebarTabFavs || focused == sidebarSettingsBtn
-            if (isHeaderOrTabFocused) {
-                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    return super.onKeyDown(keyCode, event)
-                }
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                if (genreList.visibility == View.VISIBLE) {
-                    openSettings()
-                } else {
-                    showGenresLevel()
-                }
-                return true
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                if (genreList.visibility == View.VISIBLE) {
-                    showGuideLevel()
-                } else {
-                    focusedGuideChannel()?.let { openChannelPrograms(it) }
-                }
-                return true
-            }
-        }
-
-        if (::keymapPanelCard.isInitialized && keymapPanelCard.visibility == View.VISIBLE) {
-            if (activeMappingAction != null) {
-                if (keyCode == KeyEvent.KEYCODE_BACK) {
-                    activeMappingAction = null
-                    keymapHintText.text = getString(R.string.keymap_press_hint)
-                    renderKeyMapRows()
+            val onAllTab = focused == sidebarTabAll
+            val onFavTab = focused == sidebarTabFavs
+            if (onAllTab || onFavTab) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    setFavoritesFilter(false)
+                    sidebarTabAll.requestFocus()
                     return true
                 }
-                val action = activeMappingAction!!
-                keyMappingRepository.setCustomKey(action, keyCode)
-                val keyName = keyMappingRepository.getKeyDisplayName(keyCode)
-                Toast.makeText(this, "Mapped $keyName to ${action.title}", Toast.LENGTH_SHORT).show()
-                activeMappingAction = null
-                keymapHintText.text = getString(R.string.keymap_press_hint)
-                renderKeyMapRows()
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    setFavoritesFilter(true)
+                    sidebarTabFavs.requestFocus()
+                    return true
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    focusChannelListAtSelected()
+                    return true
+                }
+            }
+            if (focused == sidebarSettingsBtn && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                if (isFavoritesFilterActive) sidebarTabFavs.requestFocus() else sidebarTabAll.requestFocus()
                 return true
             }
-            if (keyCode == KeyEvent.KEYCODE_BACK) {
-                closeKeyMapper()
-                return true
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP && focused != null) {
+                val holder = channelRecyclerView.findContainingViewHolder(focused)
+                if (holder != null && holder.bindingAdapterPosition <= 0) {
+                    if (isFavoritesFilterActive) sidebarTabFavs.requestFocus() else sidebarTabAll.requestFocus()
+                    return true
+                }
+            }
+            val inChannelList = focused != null && channelRecyclerView.findContainingViewHolder(focused) != null
+            if (inChannelList || genreList.visibility == View.VISIBLE) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    if (genreList.visibility == View.VISIBLE) {
+                        openSettings()
+                    } else {
+                        showGenresLevel()
+                    }
+                    return true
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    if (genreList.visibility == View.VISIBLE) {
+                        showGuideLevel()
+                    } else {
+                        focusedGuideChannel()?.let { openChannelPrograms(it) }
+                    }
+                    return true
+                }
             }
         }
 
@@ -1622,7 +1849,7 @@ class MainActivity : Activity(), CoroutineScope {
                 val isNowFav = repository.toggleFavorite(ch.id)
                 channelAdapter.notifyFavoriteChanged(ch.id)
                 val msg = if (isNowFav) "Added to Favorites ★" else "Removed from Favorites"
-                Toast.makeText(this, "${ch.displayName}: $msg", Toast.LENGTH_SHORT).show()
+                showAppToast("${ch.displayName}: $msg")
                 if (isFavoritesFilterActive) refreshDisplayedChannels()
             }
             return true
@@ -1685,14 +1912,14 @@ class MainActivity : Activity(), CoroutineScope {
         }
 
         if (keyMappingRepository.matches(RemoteAction.OPEN_GUIDE, keyCode)) {
+            if (::settingsContainer.isInitialized && settingsContainer.visibility == View.VISIBLE) {
+                return true
+            }
             if (!isAnyMenuVisible()) {
                 showSidebar()
                 return true
             } else if (::sidebarContainer.isInitialized && sidebarContainer.visibility == View.VISIBLE) {
                 showGenresLevel()
-                return true
-            } else if (::settingsContainer.isInitialized && settingsContainer.visibility == View.VISIBLE) {
-                hideSidebar()
                 return true
             }
         }
@@ -1712,11 +1939,11 @@ class MainActivity : Activity(), CoroutineScope {
                 }
                 ::channelProgramsCard.isInitialized && channelProgramsCard.visibility == View.VISIBLE -> closeChannelPrograms()
                 ::confirmActionCard.isInitialized && confirmActionCard.visibility == View.VISIBLE -> closeConfirmation()
-                ::keymapPanelCard.isInitialized && keymapPanelCard.visibility == View.VISIBLE -> closeKeyMapper()
+                ::channelActionCard.isInitialized && channelActionCard.visibility == View.VISIBLE -> closeChannelActionSheet()
                 ::qrPanelCard.isInitialized && qrPanelCard.visibility == View.VISIBLE -> closePhoneSetup()
                 ::startupPickerCard.isInitialized && startupPickerCard.visibility == View.VISIBLE -> closeStartupPicker()
                 ::editNumberCard.isInitialized && editNumberCard.visibility == View.VISIBLE -> closeEditNumberDialog()
-                ::settingsContainer.isInitialized && settingsContainer.visibility == View.VISIBLE -> closeSettings()
+                ::settingsContainer.isInitialized && settingsContainer.visibility == View.VISIBLE -> { }
                 ::sidebarContainer.isInitialized && sidebarContainer.visibility == View.VISIBLE && genreList.visibility == View.VISIBLE -> showGuideLevel()
                 ::sidebarContainer.isInitialized && sidebarContainer.visibility == View.VISIBLE -> hideSidebar()
                 ::numericEntryCard.isInitialized && numericEntryCard.visibility == View.VISIBLE -> {
@@ -1734,10 +1961,10 @@ class MainActivity : Activity(), CoroutineScope {
                             recallPreviousChannel()
                             hasRevertedToPrevious = true
                             lastBackPressTime = now
-                            Toast.makeText(this, "Press BACK again to exit", Toast.LENGTH_SHORT).show()
+                            showAppToast("Press BACK again to exit")
                         } else {
                             lastBackPressTime = now
-                            Toast.makeText(this, "Press BACK again to exit", Toast.LENGTH_SHORT).show()
+                            showAppToast("Press BACK again to exit")
                         }
                     }
                 }

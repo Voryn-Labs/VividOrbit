@@ -14,9 +14,10 @@
 
     <TextView
         android:id="@+id/channel_number"
-        android:layout_width="48dp"
+        android:layout_width="64dp"
         android:layout_height="match_parent"
         android:gravity="end|center_vertical"
+        android:paddingEnd="4dp"
         android:includeFontPadding="false"
         android:maxLines="1"
         android:ellipsize="none"

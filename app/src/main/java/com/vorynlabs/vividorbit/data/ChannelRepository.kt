@@ -316,20 +316,20 @@ class ChannelRepository(private val context: Context) {
         }
 
         var swappedChannelId: Long? = null
-        val conflictingEntry = currentMap.entries.find { it.value == newNumber && it.key != channelId }
+        val rawChannels = fetchRawChannels()
+        fun displayed(id: Long): String {
+            currentMap[id]?.let { return it }
+            return rawChannels.find { it.id == id }?.originalDisplayNumber.orEmpty()
+        }
+        val conflictId = rawChannels.map { it.id }.firstOrNull { it != channelId && displayed(it) == newNumber }
 
-        if (conflictingEntry != null) {
-            swappedChannelId = conflictingEntry.key
-            if (oldNumber != null) {
-                currentMap[conflictingEntry.key] = oldNumber
+        if (conflictId != null) {
+            swappedChannelId = conflictId
+            val previous = oldNumber ?: displayed(channelId)
+            if (previous.isNotBlank() && previous != newNumber) {
+                currentMap[conflictId] = previous
             } else {
-                val rawChannels = fetchRawChannels()
-                val conflictRaw = rawChannels.find { it.id == conflictingEntry.key }
-                if (conflictRaw != null && conflictRaw.originalDisplayNumber.isNotBlank()) {
-                    currentMap[conflictingEntry.key] = conflictRaw.originalDisplayNumber
-                } else {
-                    currentMap.remove(conflictingEntry.key)
-                }
+                currentMap.remove(conflictId)
             }
         }
 

@@ -3,408 +3,273 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>VividOrbit — TV Lineup Manager</title>
+  <title>VividOrbit</title>
   <style>
     :root {
-      --bg: #0B0B0C;
-      --card-bg: #161618;
-      --card-hover: #1D1D20;
-      --border: #29292C;
-      --text-primary: #F2F2F3;
-      --text-secondary: #8A8A8E;
-      --accent: #E5484D;
-      --accent-green: #30A46C;
-      --accent-blue: #3E63DD;
-      --accent-gold: #FFD700;
-      --radius: 10px;
+      --bg: #0A0C10;
+      --surface: #12151C;
+      --line: #2B3140;
+      --text: #F5F7FA;
+      --muted: #8A929E;
+      --accent: #2DD4BF;
+      --gold: #FBBF24;
     }
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      -webkit-tap-highlight-color: transparent;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background-color: var(--bg);
-      color: var(--text-primary);
-      padding: 16px;
-      max-width: 680px;
-      margin: 0 auto;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
       min-height: 100vh;
+      padding: 28px 20px 48px;
+      max-width: 560px;
+      margin: 0 auto;
+      -webkit-tap-highlight-color: transparent;
     }
     header {
       display: flex;
-      align-items: center;
+      align-items: baseline;
       justify-content: space-between;
-      margin-bottom: 20px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--border);
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
+      margin-bottom: 28px;
     }
     .brand-title {
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-    }
-    .brand-sub {
-      font-size: 12px;
-      color: var(--text-secondary);
-    }
-    .btn-sync {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-      padding: 8px 14px;
-      border-radius: 8px;
-      font-size: 13px;
-      cursor: pointer;
+      font-size: 22px;
       font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 6px;
+      letter-spacing: -0.03em;
     }
-    .btn-sync:active {
-      background: var(--card-hover);
+    .brand-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .btn-sync {
+      background: none;
+      border: 0;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 0;
     }
-    .section-card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 16px;
-      margin-bottom: 16px;
-    }
-    .section-title {
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--text-secondary);
+    .panel { margin-bottom: 28px; }
+    .label {
+      font-size: 11px;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
-      letter-spacing: 0.8px;
+      color: var(--muted);
       margin-bottom: 12px;
     }
-    .settings-grid {
-      display: grid;
-      gap: 12px;
-    }
-    .setting-row {
+    .row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: 16px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
     }
-    .setting-label {
-      font-size: 14px;
-      font-weight: 500;
-    }
-    .setting-desc {
-      font-size: 12px;
-      color: var(--text-secondary);
-      margin-top: 2px;
-    }
-    .switch {
-      position: relative;
-      display: inline-block;
-      width: 44px;
-      height: 24px;
-      flex-shrink: 0;
-    }
+    .row:last-child { border-bottom: 0; }
+    .setting-label { font-size: 15px; font-weight: 500; }
+    .setting-desc { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
     .switch input { opacity: 0; width: 0; height: 0; }
     .slider {
-      position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
-      background-color: var(--border);
-      transition: .2s; border-radius: 24px;
+      position: absolute; inset: 0;
+      background: var(--line);
+      border-radius: 24px;
+      transition: .2s;
     }
     .slider:before {
-      position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
-      background-color: white; transition: .2s; border-radius: 50%;
+      content: "";
+      position: absolute;
+      height: 18px; width: 18px; left: 3px; bottom: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: .2s;
     }
-    input:checked + .slider { background-color: var(--accent-green); }
-    input:checked + .slider:before { transform: translateX(20px); }
-    
+    input:checked + .slider { background: var(--accent); }
+    input:checked + .slider:before { transform: translateX(18px); }
     select, input[type="text"], input[type="number"] {
-      background: #111113;
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-      padding: 8px 12px;
-      border-radius: 6px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 8px 10px;
       font-size: 13px;
+      border-radius: 0;
       outline: none;
     }
-    select {
-      max-width: 180px;
-    }
-    .btn-group {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 8px;
-    }
+    .actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
     .action-btn {
       flex: 1;
-      min-width: 120px;
-      background: #202024;
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-      padding: 10px 14px;
-      border-radius: 8px;
-      font-size: 13px;
+      min-width: 90px;
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 10px 8px;
+      font-size: 12px;
       font-weight: 600;
-      cursor: pointer;
-      text-align: center;
+      letter-spacing: 0.04em;
     }
-    .action-btn:active {
-      background: #2B2B30;
-    }
-    .action-btn.primary {
-      background: var(--accent-blue);
-      border-color: #5B7BF0;
-    }
-    .filter-bar {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 12px;
-    }
+    .action-btn.primary { border-color: var(--accent); color: var(--accent); }
+    .filter-bar { display: flex; gap: 18px; margin-bottom: 14px; }
     .filter-btn {
-      background: #18181B;
-      border: 1px solid var(--border);
-      color: var(--text-secondary);
-      padding: 8px 14px;
-      border-radius: 20px;
-      font-size: 13px;
+      background: none;
+      border: 0;
+      color: var(--muted);
+      font-size: 14px;
       font-weight: 600;
-      cursor: pointer;
+      padding: 6px 0;
+      border-bottom: 1px solid transparent;
     }
-    .filter-btn.active {
-      background: #27272A;
-      color: var(--text-primary);
-      border-color: #52525B;
-    }
+    .filter-btn.active { color: var(--text); border-bottom-color: var(--accent); }
     .search-box {
       width: 100%;
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 12px 16px;
-      color: var(--text-primary);
-      font-size: 14px;
-      margin-bottom: 12px;
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      color: var(--text);
+      padding: 10px 0;
+      font-size: 15px;
+      margin-bottom: 8px;
       outline: none;
+      border-radius: 0;
     }
-    .search-box:focus {
-      border-color: #555;
-    }
-    .channel-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
+    .channel-list { display: flex; flex-direction: column; }
     .channel-card {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 14px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 10px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--line);
+      background: none;
     }
-    .channel-info {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex: 1;
-      min-width: 0;
-    }
+    .channel-info { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
     .channel-num-badge {
-      background: #242428;
-      border: 1px solid #38383E;
-      color: #FFF;
-      font-weight: 700;
-      font-size: 14px;
-      padding: 4px 10px;
-      border-radius: 6px;
-      min-width: 44px;
-      text-align: center;
-      cursor: pointer;
-    }
-    .channel-text {
-      flex: 1;
-      min-width: 0;
-    }
-    .channel-name {
-      font-size: 14px;
+      min-width: 36px;
+      font-size: 15px;
       font-weight: 600;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      color: var(--accent);
+      background: none;
+      border: 0;
+      padding: 0;
+      text-align: left;
     }
-    .channel-dth {
-      font-size: 11px;
-      color: var(--text-secondary);
-      margin-top: 2px;
+    .channel-text { flex: 1; min-width: 0; }
+    .channel-name { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+    .channel-hidden-badge {
+      display: inline-block;
+      margin-left: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gold);
+      border: 1px solid var(--gold);
+      padding: 1px 5px;
+      vertical-align: middle;
     }
-    .channel-actions {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
+    .channel-dth { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .channel-actions { display: flex; gap: 4px; flex-shrink: 0; min-width: 140px; }
     .icon-btn {
-      background: #202024;
-      border: 1px solid var(--border);
-      color: var(--text-primary);
+      background: none;
+      border: 0;
+      color: var(--muted);
       width: 32px;
       height: 32px;
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      font-size: 12px;
-    }
-    .icon-btn:active { background: #2F2F35; }
-    .icon-btn.fav {
-      color: var(--text-secondary);
-      font-size: 15px;
-    }
-    .icon-btn.fav.active {
-      color: var(--accent-gold);
-    }
-    .icon-btn.tune {
-      background: #192B47;
-      border-color: #2D4C7C;
-      color: #79B8FF;
-      width: auto;
-      padding: 0 10px;
-      font-size: 12px;
-      font-weight: 600;
-    }
-    .toast {
-      position: fixed;
-      bottom: 24px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #1C1C20;
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-      padding: 10px 20px;
-      border-radius: 20px;
       font-size: 13px;
-      font-weight: 500;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    }
+    .icon-btn.fav.active { color: var(--gold); }
+    .icon-btn.tune { width: auto; color: var(--accent); font-weight: 600; font-size: 12px; padding: 0 6px; }
+    .icon-btn.unhide { width: auto; color: var(--gold); font-weight: 600; font-size: 11px; padding: 0 6px; }
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 10px 16px;
+      font-size: 13px;
       opacity: 0;
       pointer-events: none;
-      transition: opacity .25s ease;
-      z-index: 1000;
+      transition: opacity .2s;
+      z-index: 20;
     }
     .toast.show { opacity: 1; }
     .modal-overlay {
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.75);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      z-index: 999;
+      position: fixed; inset: 0;
+      background: rgba(10,12,16,.86);
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px; z-index: 30;
     }
     .modal-card {
-      background: #161618;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      width: 100%;
-      max-width: 360px;
-      padding: 20px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      width: 100%; max-width: 340px;
+      padding: 22px;
     }
-    .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+    .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
     .modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
   </style>
 </head>
 <body>
-
   <header>
-    <div class="brand">
-      <div>
-        <div class="brand-title">VividOrbit Live TV</div>
-        <div class="brand-sub" id="channel-count-text">Connecting...</div>
-      </div>
+    <div>
+      <div class="brand-title">VividOrbit</div>
+      <div class="brand-sub" id="channel-count-text">Connecting</div>
     </div>
-    <button class="btn-sync" onclick="loadState()">
-      <span>↻</span> Sync
-    </button>
+    <button class="btn-sync" onclick="loadState()">Refresh</button>
   </header>
 
-  <!-- Preferences / Controls -->
-  <div class="section-card">
-    <div class="section-title">Settings & Lineup Management</div>
-    <div class="settings-grid">
-      <div class="setting-row">
-        <div>
-          <div class="setting-label">Custom Channel Numbers</div>
-          <div class="setting-desc">Enable custom linear ordering</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="toggle-custom-numbers" onchange="updateCustomToggle()">
-          <span class="slider"></span>
-        </label>
+  <section class="panel">
+    <div class="label">Lineup</div>
+    <div class="row">
+      <div>
+        <div class="setting-label">Custom numbers</div>
+        <div class="setting-desc">Use your own 1…N map</div>
       </div>
-
-      <div class="setting-row">
-        <div>
-          <div class="setting-label">Startup Mode</div>
-          <div class="setting-desc">Channel tuned on app launch</div>
-        </div>
-        <select id="select-startup-mode" onchange="updateStartupMode()">
-          <option value="last">Last Watched</option>
-          <option value="fixed">Fixed Default</option>
-          <option value="first">First in List</option>
-        </select>
-      </div>
-
-      <div class="setting-row" id="row-default-channel" style="display:none;">
-        <div>
-          <div class="setting-label">Default Channel</div>
-          <div class="setting-desc">Select fixed channel</div>
-        </div>
-        <select id="select-default-channel" onchange="updateDefaultChannel()"></select>
-      </div>
-
-      <div class="btn-group">
-        <button class="action-btn" onclick="autoRenumber()">⚡ Auto 1..N</button>
-        <button class="action-btn" onclick="exportLineup()">💾 Backup JSON</button>
-        <button class="action-btn" onclick="triggerImport()">📥 Restore</button>
-        <input type="file" id="file-import" style="display:none" accept=".json" onchange="handleFileImport(event)">
-      </div>
+      <label class="switch">
+        <input type="checkbox" id="toggle-custom-numbers" onchange="updateCustomToggle()">
+        <span class="slider"></span>
+      </label>
     </div>
-  </div>
+    <div class="row">
+      <div>
+        <div class="setting-label">Startup</div>
+        <div class="setting-desc">What plays when the app opens</div>
+      </div>
+      <select id="select-startup-mode" onchange="updateStartupMode()">
+        <option value="last">Last watched</option>
+        <option value="fixed">Fixed default</option>
+        <option value="first">First in list</option>
+      </select>
+    </div>
+    <div class="row" id="row-default-channel" style="display:none;">
+      <div>
+        <div class="setting-label">Default channel</div>
+        <div class="setting-desc">Fixed startup</div>
+      </div>
+      <select id="select-default-channel" onchange="updateDefaultChannel()"></select>
+    </div>
+    <div class="actions">
+      <button class="action-btn" onclick="autoRenumber()">Auto 1–N</button>
+      <button class="action-btn" onclick="exportLineup()">Backup</button>
+      <button class="action-btn" onclick="triggerImport()">Restore</button>
+      <input type="file" id="file-import" style="display:none" accept=".json" onchange="handleFileImport(event)">
+    </div>
+  </section>
 
-  <!-- Filter & Search Bar -->
-  <div class="filter-bar">
-    <button class="filter-btn active" id="filter-all" onclick="setFilter('all')">All Channels</button>
-    <button class="filter-btn" id="filter-favs" onclick="setFilter('favs')">★ Favorites</button>
-  </div>
+  <section class="panel">
+    <div class="filter-bar">
+      <button class="filter-btn active" id="filter-all" onclick="setFilter('all')">All</button>
+      <button class="filter-btn" id="filter-favs" onclick="setFilter('favs')">Favorites</button>
+    </div>
+    <input type="text" class="search-box" id="search-input" placeholder="Search" oninput="filterChannels()">
+    <div class="channel-list" id="channel-container"></div>
+  </section>
 
-  <input type="text" class="search-box" id="search-input" placeholder="Search channels by name or number..." oninput="filterChannels()">
-
-  <!-- Channel List -->
-  <div class="channel-list" id="channel-container"></div>
-
-  <!-- Toast -->
   <div class="toast" id="toast"></div>
-
-  <!-- Edit Number Modal -->
   <div class="modal-overlay" id="edit-modal" style="display:none;">
     <div class="modal-card">
-      <div class="modal-title" id="modal-channel-name">Edit Channel Number</div>
-      <div style="margin-bottom: 12px; font-size: 13px; color: var(--text-secondary);" id="modal-dth-info"></div>
-      <input type="number" id="modal-input-number" style="width: 100%; font-size: 18px; text-align: center; font-weight: 700; padding: 10px;" min="1" max="9999">
-      <div id="modal-conflict-warning" style="color: #F08C00; font-size: 12px; margin-top: 8px; display: none;"></div>
+      <div class="modal-title" id="modal-channel-name">Number</div>
+      <div style="margin-bottom:12px;font-size:12px;color:var(--muted);" id="modal-dth-info"></div>
+      <input type="number" id="modal-input-number" style="width:100%;font-size:22px;text-align:center;font-weight:600;padding:12px;" min="1" max="9999">
+      <div id="modal-conflict-warning" style="color:var(--gold);font-size:12px;margin-top:8px;display:none;"></div>
       <div class="modal-actions">
         <button class="action-btn" onclick="closeEditModal()">Cancel</button>
-        <button class="action-btn primary" onclick="saveModalNumber()">Save & Swap</button>
+        <button class="action-btn primary" onclick="saveModalNumber()">Save</button>
       </div>
     </div>
   </div>
@@ -511,8 +376,10 @@
 
       list.forEach(ch => {
         const isFav = state.favoriteIds.includes(ch.id);
+        const isHidden = !!ch.isHidden;
         const card = document.createElement('div');
         card.className = 'channel-card';
+        card.dataset.hidden = isHidden ? 'true' : 'false';
 
         // Left info container
         const infoDiv = document.createElement('div');
@@ -535,6 +402,12 @@
         const nameDiv = document.createElement('div');
         nameDiv.className = 'channel-name';
         nameDiv.textContent = ch.name;
+        if (isHidden) {
+          const hiddenBadge = document.createElement('span');
+          hiddenBadge.className = 'channel-hidden-badge';
+          hiddenBadge.textContent = 'hidden';
+          nameDiv.appendChild(hiddenBadge);
+        }
 
         const dthDiv = document.createElement('div');
         dthDiv.className = 'channel-dth';
@@ -551,9 +424,18 @@
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'channel-actions';
 
+        if (isHidden) {
+          const unhideBtn = document.createElement('button');
+          unhideBtn.className = 'icon-btn unhide';
+          unhideBtn.title = 'Unhide';
+          unhideBtn.textContent = 'Unhide';
+          unhideBtn.onclick = () => unhideChannel(ch.id);
+          actionsDiv.appendChild(unhideBtn);
+        }
+
         const tuneBtn = document.createElement('button');
         tuneBtn.className = 'icon-btn tune';
-        tuneBtn.textContent = '📺 Tune';
+        tuneBtn.textContent = 'Tune';
         tuneBtn.onclick = () => tuneChannel(ch.id);
 
         const upBtn = document.createElement('button');
@@ -571,7 +453,7 @@
         const topBtn = document.createElement('button');
         topBtn.className = 'icon-btn';
         topBtn.title = 'Move to Top';
-        topBtn.textContent = '🔝';
+        topBtn.textContent = 'Top';
         topBtn.onclick = () => moveToTop(ch.id);
 
         actionsDiv.appendChild(tuneBtn);
@@ -658,6 +540,14 @@
     async function tuneChannel(id) {
       const res = await apiRequest('/api/tune', 'POST', { channelId: id });
       if (res && res.success) showToast("Tuned channel on TV");
+    }
+
+    async function unhideChannel(channelId) {
+      const res = await apiRequest('/api/hidden', 'POST', { channelId, hidden: false });
+      if (res && res.success) {
+        showToast("Channel restored");
+        loadState();
+      }
     }
 
     async function updateCustomToggle() {

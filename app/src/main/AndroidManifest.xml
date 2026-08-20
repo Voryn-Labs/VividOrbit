@@ -19,6 +19,9 @@
 
         <activity
             android:name="com.vorynlabs.vividorbit.MainActivity"
+            android:icon="@mipmap/ic_launcher"
+            android:banner="@drawable/banner"
+            android:logo="@drawable/banner"
             android:exported="true"
             android:screenOrientation="landscape">
             <intent-filter>
