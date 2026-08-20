@@ -22,8 +22,8 @@ android {
     signingConfigs {
         release {
             if (keystorePropertiesFile.exists()) {
-                def storePass = System.getenv("VIVIDORBIT_STORE_PASSWORD")
-                def keyPass = System.getenv("VIVIDORBIT_KEY_PASSWORD") ?: storePass
+                def storePass = System.getenv("VIVIDORBIT_STORE_PASSWORD") ?: keystoreProperties['storePassword']
+                def keyPass = System.getenv("VIVIDORBIT_KEY_PASSWORD") ?: keystoreProperties['keyPassword'] ?: storePass
                 if (storePass) {
                     storeFile rootProject.file(keystoreProperties['storeFile'])
                     storePassword storePass
@@ -36,7 +36,7 @@ android {
 
     buildTypes {
         release {
-            if (keystorePropertiesFile.exists() && System.getenv("VIVIDORBIT_STORE_PASSWORD")) {
+            if (keystorePropertiesFile.exists() && (System.getenv("VIVIDORBIT_STORE_PASSWORD") || keystoreProperties['storePassword'])) {
                 signingConfig signingConfigs.release
             }
             minifyEnabled true
