@@ -1670,6 +1670,14 @@ class MainActivity : Activity(), CoroutineScope {
         walkthroughController.show()
     }
 
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode == KeyEvent.KEYCODE_3D_MODE || event.keyCode == 206) {
+            // Block 3D mode key events from reaching TV over HDMI-CEC
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onKeyLongPress(keyCode: Int, event: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK && !isAnyMenuVisible()) {
             backLongPressHandled = true
