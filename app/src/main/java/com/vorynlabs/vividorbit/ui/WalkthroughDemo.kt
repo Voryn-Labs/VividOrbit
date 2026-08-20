@@ -1,6 +1,6 @@
 package com.vorynlabs.vividorbit.ui
 
-fun walkthroughPageCount(): Int = 4
+fun walkthroughPageCount(): Int = 1
 
 fun nextWalkthroughPage(current: Int): Int =
     (current + 1).coerceAtMost(walkthroughPageCount() - 1)

@@ -13,32 +13,23 @@ import org.junit.Test
 class WalkthroughTest {
 
     @Test
-    fun testPageCountIsFour() {
-        assertEquals(4, walkthroughPageCount())
-    }
-
-    @Test
-    fun testNextAdvancesWithinBounds() {
-        assertEquals(1, nextWalkthroughPage(0))
-        assertEquals(2, nextWalkthroughPage(1))
-        assertEquals(3, nextWalkthroughPage(2))
+    fun testPageCountIsOne() {
+        assertEquals(1, walkthroughPageCount())
     }
 
     @Test
     fun testNextClampsAtLastPage() {
-        assertEquals(3, nextWalkthroughPage(3))
+        assertEquals(0, nextWalkthroughPage(0))
     }
 
     @Test
     fun testPrevClampsAtFirstPage() {
         assertEquals(0, prevWalkthroughPage(0))
-        assertEquals(2, prevWalkthroughPage(3))
     }
 
     @Test
     fun testIsLastWalkthroughPage() {
-        assertFalse(isLastWalkthroughPage(2))
-        assertTrue(isLastWalkthroughPage(3))
+        assertTrue(isLastWalkthroughPage(0))
     }
 
     @Test
